@@ -1,4 +1,4 @@
-name: Build & Publish to npm (with polyfills)
+name: Build & Publish to npm (with polyfills + dependency installs)
 
 on:
   push:
@@ -21,13 +21,23 @@ jobs:
           node-version: 20
           registry-url: 'https://registry.npmjs.org/'
 
-      - name: Install project deps & bundlers
+      - name: Install project deps & bundlers + runtime packages
         run: |
           set -euo pipefail
-          # install any deps declared in package.json (if present)
+          # install any declared deps in package.json (if any)
           npm install || true
-          # install bundlers locally (no-save keeps package.json unchanged)
+
+          # Bundlers
           npm install --no-save esbuild @vercel/ncc
+
+          # Polyfills & runtime libs referenced by mods/userScript.js
+          npm install --no-save whatwg-fetch core-js-bundle
+
+          # formatjs polyfills (some packages expose different filenames; we fetch CDN fallback later)
+          npm install --no-save @formatjs/intl-getcanonicallocales @formatjs/intl-locale @formatjs/intl-displaynames || true
+
+          # Additional libs referenced in mods/ that esbuild needs to resolve
+          npm install --no-save qrcode-npm esprima estraverse || true
 
       - name: Fetch polyfills from CDN & prepare tmp entry (fix relative imports)
         run: |
@@ -35,9 +45,10 @@ jobs:
           mkdir -p tmp dist
 
           # Download common polyfills - adjust versions/URLs if needed
-          # Using unpkg CDN; if a file doesn't exist, ignore but keep going.
           curl -fsSL https://unpkg.com/whatwg-fetch/dist/fetch.umd.js -o tmp/whatwg-fetch.umd.js || true
           curl -fsSL https://unpkg.com/core-js-bundle@3.32.2/minified.js -o tmp/core-js-bundle.min.js || true
+
+          # Try formatjs polyfills from CDN (may not exist for specific versions; ignore missing)
           curl -fsSL https://unpkg.com/@formatjs/intl-getcanonicallocales@latest/polyfill.iife.js -o tmp/intl-getcanonicallocales.polyfill.iife.js || true
           curl -fsSL https://unpkg.com/@formatjs/intl-locale@latest/polyfill.iife.js -o tmp/intl-locale.polyfill.iife.js || true
           curl -fsSL https://unpkg.com/@formatjs/intl-displaynames@latest/polyfill.iife.js -o tmp/intl-displaynames.polyfill.iife.js || true
@@ -83,13 +94,11 @@ jobs:
 
           echo "userScript built:"
           ls -lh dist/userScript.js || true
-          echo "head of dist/userScript.js:"
           head -n 8 dist/userScript.js || true
 
       - name: Bundle service with ncc
         run: |
           set -euo pipefail
-          # Adjust service entry if different in your repo
           if [ ! -f service/index.js ]; then
             echo "service/index.js not found - please adjust workflow to the correct service entry" >&2
             exit 1
