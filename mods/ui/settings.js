@@ -439,14 +439,6 @@ export default function modernUI(update, parameters) {
                                     value: 'subscriptions'
                                 },
                                 {
-                                    name: 'Abos',
-                                    value: 'abos'
-                                },
-                                {
-                                    name: 'Feed',
-                                    value: 'feed'
-                                },
-                                {
                                     name: 'Library',
                                     value: 'library'
                                 },
