@@ -1,4 +1,4 @@
-name: Build & Publish to npm (with polyfills + dependency installs)
+name: Build & Publish to npm (auto-detect service entry)
 
 on:
   push:
@@ -24,58 +24,97 @@ jobs:
       - name: Install project deps & bundlers + runtime packages
         run: |
           set -euo pipefail
-          # install any declared deps in package.json (if any)
+          # install declared deps (if any)
           npm install || true
 
-          # Bundlers
+          # bundlers & packagers
           npm install --no-save esbuild @vercel/ncc
 
-          # Polyfills & runtime libs referenced by mods/userScript.js
-          npm install --no-save whatwg-fetch core-js-bundle
+          # runtime packages that esbuild may need (add more if errors show)
+          npm install --no-save whatwg-fetch core-js-bundle qrcode-npm esprima estraverse || true
 
-          # formatjs polyfills (some packages expose different filenames; we fetch CDN fallback later)
-          npm install --no-save @formatjs/intl-getcanonicallocales @formatjs/intl-locale @formatjs/intl-displaynames || true
+      - name: Dump mods/ and service/ file tree (for debugging)
+        run: |
+          echo "=== repo root ==="
+          ls -la
+          echo "=== mods/ ==="
+          ls -la mods || true
+          echo "=== service/ ==="
+          ls -la service || true
+          echo "=== show first lines of mods/userScript.js (if exists) ==="
+          if [ -f mods/userScript.js ]; then head -n 20 mods/userScript.js; else echo "mods/userScript.js not found"; fi
 
-          # Additional libs referenced in mods/ that esbuild needs to resolve
-          npm install --no-save qrcode-npm esprima estraverse || true
+      - name: Detect service entry (index.js / main.js / service.js / fallback)
+        id: detect
+        run: |
+          set -euo pipefail
+          ENTRY=""
+          for cand in index.js main.js service.js app.js server.js start.js; do
+            if [ -f "service/$cand" ]; then
+              ENTRY="service/$cand"
+              break
+            fi
+          done
+          # fallback: first .js in service root
+          if [ -z "$ENTRY" ] && [ -d service ]; then
+            FIRST_JS=$(find service -maxdepth 1 -type f -name '*.js' | head -n1 || true)
+            if [ -n "$FIRST_JS" ]; then
+              ENTRY="$FIRST_JS"
+            fi
+          fi
+          if [ -z "$ENTRY" ]; then
+            echo "::error::No service entry found in service/ (tried index.js main.js service.js etc)."
+            echo "No service entry detected" > /tmp/service_entry_missing
+            exit 1
+          fi
+          echo "service entry detected: $ENTRY"
+          echo "::set-output name=service_entry::$ENTRY"
+      - name: Show detected service entry
+        run: |
+          echo "service entry: ${{ steps.detect.outputs.service_entry }}"
 
-      - name: Fetch polyfills from CDN & prepare tmp entry (fix relative imports)
+      - name: Install bundler deps (if more missing you will see errors — add them to the list above)
+        run: |
+          set -euo pipefail
+          # ensure esbuild & ncc exist as CLI tools
+          npm install --no-save esbuild @vercel/ncc
+
+      - name: Fetch polyfills & prepare tmp entry (rewrite imports)
         run: |
           set -euo pipefail
           mkdir -p tmp dist
 
-          # Download common polyfills - adjust versions/URLs if needed
+          # download polyfills (ignore missing)
           curl -fsSL https://unpkg.com/whatwg-fetch/dist/fetch.umd.js -o tmp/whatwg-fetch.umd.js || true
           curl -fsSL https://unpkg.com/core-js-bundle@3.32.2/minified.js -o tmp/core-js-bundle.min.js || true
-
-          # Try formatjs polyfills from CDN (may not exist for specific versions; ignore missing)
           curl -fsSL https://unpkg.com/@formatjs/intl-getcanonicallocales@latest/polyfill.iife.js -o tmp/intl-getcanonicallocales.polyfill.iife.js || true
           curl -fsSL https://unpkg.com/@formatjs/intl-locale@latest/polyfill.iife.js -o tmp/intl-locale.polyfill.iife.js || true
           curl -fsSL https://unpkg.com/@formatjs/intl-displaynames@latest/polyfill.iife.js -o tmp/intl-displaynames.polyfill.iife.js || true
           curl -fsSL https://unpkg.com/@formatjs/intl-displaynames@latest/locale-data/en.js -o tmp/intl-displaynames.locale-data.en.js || true
 
-          # Concatenate downloaded polyfills (if any)
+          # concat polyfills if present
           cat tmp/whatwg-fetch.umd.js tmp/core-js-bundle.min.js tmp/intl-getcanonicallocales.polyfill.iife.js tmp/intl-locale.polyfill.iife.js tmp/intl-displaynames.polyfill.iife.js tmp/intl-displaynames.locale-data.en.js > tmp/polyfills.js || true
-          echo "Polyfills size (bytes):"
+          echo "polyfills size:"
           wc -c tmp/polyfills.js || true
 
-          # Create temporary entry:
-          # 1) Remove import lines referencing the polyfills we fetched above (case-insensitive)
-          # 2) Rewrite relative imports starting with "./" to "../mods/" so esbuild resolves them
+          # create tmp entry: remove import lines for polyfills, rewrite "./..." -> "../mods/..."
+          if [ ! -f mods/userScript.js ]; then
+            echo "::error::mods/userScript.js not found; update workflow entry or repo layout."
+            exit 1
+          fi
+
           sed -E '/import .*whatwg-fetch|import .*core-js|import .*@formatjs\/intl-getcanonicallocales|import .*@formatjs\/intl-locale|import .*@formatjs\/intl-displaynames|@formatjs\/intl-displaynames\/locale-data/Id' mods/userScript.js > tmp/userScript.entry.step1.js
 
-          # Convert import "./path/..." to import "../mods/path/..." (handles single/double quotes)
           sed -E "s|import[[:space:]]+\"\\./([^\"]+)\"|import \"../mods/\\1\"|g; s|import[[:space:]]+'\\./([^']+)'|import '../mods/\\1'|g" tmp/userScript.entry.step1.js > tmp/userScript.entry.js
 
-          echo "------- tmp/userScript.entry.js head -------"
+          echo "tmp/userScript.entry.js head:"
           head -n 40 tmp/userScript.entry.js || true
 
-      - name: Bundle userScript (esbuild) and prepare final injected file
+      - name: Bundle userScript (esbuild) and create dist/userScript.js
         run: |
           set -euo pipefail
           mkdir -p tmp dist
 
-          # Bundle the modified entry into a single IIFE
           npx esbuild tmp/userScript.entry.js \
             --bundle \
             --platform=browser \
@@ -85,30 +124,35 @@ jobs:
             --banner:js="(function(){if(window.__TIZENTUBE_INJECT_LOADED)return;window.__TIZENTUBE_INJECT_LOADED=true;" \
             --footer:js="})();"
 
-          # Prepend polyfills if any were downloaded
           if [ -s tmp/polyfills.js ]; then
             cat tmp/polyfills.js tmp/bundle.userScript.js > dist/userScript.js
           else
             cp tmp/bundle.userScript.js dist/userScript.js
           fi
 
-          echo "userScript built:"
+          echo "Built dist/userScript.js:"
           ls -lh dist/userScript.js || true
-          head -n 8 dist/userScript.js || true
+          head -n 6 dist/userScript.js || true
 
-      - name: Bundle service with ncc
+      - name: Bundle service using detected entry
         run: |
           set -euo pipefail
-          if [ ! -f service/index.js ]; then
-            echo "service/index.js not found - please adjust workflow to the correct service entry" >&2
+          SERVICE_ENTRY="${{ steps.detect.outputs.service_entry }}"
+          echo "Service entry is: $SERVICE_ENTRY"
+
+          if [ -z "$SERVICE_ENTRY" ] || [ ! -f "$SERVICE_ENTRY" ]; then
+            echo "::error::Service entry not found: $SERVICE_ENTRY"
+            echo "Service entry not found" >&2
             exit 1
           fi
-          npx @vercel/ncc build service/index.js -o dist_tmp
+
+          npx @vercel/ncc build "$SERVICE_ENTRY" -o dist_tmp
           mv dist_tmp/index.js dist/service.js
           rm -rf dist_tmp
-          echo "service built:"
+
+          echo "Built dist/service.js:"
           ls -lh dist/service.js || true
-          head -n 8 dist/service.js || true
+          head -n 6 dist/service.js || true
 
       - name: Verify dist outputs
         run: |
