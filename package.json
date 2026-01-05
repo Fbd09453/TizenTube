@@ -1,12 +1,12 @@
 {
-  "name": "@krx/tizentubekrx",
+  "name": "@krx3d/tizentubekrx",
   "appName": "TizenTubeKrX",
-  "version": "1.15.2",
+  "version": "1.15.3",
   "description": "TizenTube is an ad-free and sponsor-free solution for your favourite streaming website on your Tizen (Samsung) TVs.",
   "packageType": "mods",
   "websiteURL": "https://youtube.com/tv?additionalDataUrl=http%3A%2F%2Flocalhost%3A8085%2Fdial%2Fapps%2FYouTube",
   "main": "dist/userScript.js",
-  "author": "KrX",
+  "author": "KrX3D",
   "serviceFile": "dist/service.js",
   "keys": [
     "MediaPlayPause",
