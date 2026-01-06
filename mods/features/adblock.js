@@ -230,16 +230,23 @@ for (const key in window._yttv) {
   }
 }
 
-
 function processShelves(shelves, shouldAddPreviews = true) {
   if (!Array.isArray(shelves)) return;
   
   for (let i = shelves.length - 1; i >= 0; i--) {
     const shelve = shelves[i];
-    if (!shelve) continue;
+    if (!shelve || !shelve.shelfRenderer) continue;
     
-    // Handle shelfRenderer
-    if (shelve.shelfRenderer?.content?.horizontalListRenderer?.items) {
+    const shelfTitle = shelve.shelfRenderer?.shelfHeaderRenderer?.title?.simpleText || '';
+    const shelfTitleLower = shelfTitle.toLowerCase();
+    
+    // Skip "Watch Again" / "Erneut ansehen" shelves - they SHOULD show watched videos
+    const isWatchAgainShelf = shelfTitleLower.includes('erneut ansehen') || 
+                               shelfTitleLower.includes('watch again') ||
+                               shelfTitleLower.includes('continue watching');
+    
+    // Handle horizontalListRenderer
+    if (shelve.shelfRenderer.content?.horizontalListRenderer?.items) {
       const items = shelve.shelfRenderer.content.horizontalListRenderer.items;
       
       deArrowify(items);
@@ -247,9 +254,12 @@ function processShelves(shelves, shouldAddPreviews = true) {
       addLongPress(items);
       if (shouldAddPreviews) addPreviews(items);
       
-      shelve.shelfRenderer.content.horizontalListRenderer.items = hideVideo(items);
+      // Only hide watched videos if NOT a "watch again" shelf
+      if (!isWatchAgainShelf) {
+        shelve.shelfRenderer.content.horizontalListRenderer.items = hideVideo(items);
+      }
       
-      // Handle shorts filtering
+      // Filter shorts
       if (!configRead('enableShorts')) {
         if (shelve.shelfRenderer.tvhtml5ShelfRendererType === 'TVHTML5_SHELF_RENDERER_TYPE_SHORTS') {
           shelves.splice(i, 1);
@@ -263,7 +273,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
     }
     
     // Handle gridRenderer
-    if (shelve.shelfRenderer?.content?.gridRenderer?.items) {
+    if (shelve.shelfRenderer.content?.gridRenderer?.items) {
       const items = shelve.shelfRenderer.content.gridRenderer.items;
       
       deArrowify(items);
@@ -271,10 +281,12 @@ function processShelves(shelves, shouldAddPreviews = true) {
       addLongPress(items);
       if (shouldAddPreviews) addPreviews(items);
       
-      shelve.shelfRenderer.content.gridRenderer.items = hideVideo(items);
+      if (!isWatchAgainShelf) {
+        shelve.shelfRenderer.content.gridRenderer.items = hideVideo(items);
+      }
     }
     
-    // Handle richShelfRenderer
+    // Handle richShelfRenderer (often used in subscriptions)
     if (shelve.richShelfRenderer?.content?.richGridRenderer?.contents) {
       const contents = shelve.richShelfRenderer.content.richGridRenderer.contents;
       
@@ -283,7 +295,21 @@ function processShelves(shelves, shouldAddPreviews = true) {
       addLongPress(contents);
       if (shouldAddPreviews) addPreviews(contents);
       
-      shelve.richShelfRenderer.content.richGridRenderer.contents = hideVideo(contents);
+      if (!isWatchAgainShelf) {
+        shelve.richShelfRenderer.content.richGridRenderer.contents = hideVideo(contents);
+      }
+      
+      // Filter shorts from richShelfRenderer
+      if (!configRead('enableShorts')) {
+        shelve.richShelfRenderer.content.richGridRenderer.contents = 
+          shelve.richShelfRenderer.content.richGridRenderer.contents.filter(
+            item => {
+              const renderer = item?.richItemRenderer?.content?.videoRenderer || 
+                             item?.richItemRenderer?.content?.reelItemRenderer;
+              return !renderer || renderer.tvhtml5ShelfRendererType !== 'TVHTML5_TILE_RENDERER_TYPE_SHORTS';
+            }
+          );
+      }
     }
   }
 }
@@ -399,73 +425,51 @@ function hideVideo(items) {
   
   if (!Array.isArray(items)) return items;
   
-  // Helper: Find progress bar in various renderer types
+  // Helper: Find progress bar in ANY renderer type
   function findProgressBar(item) {
     if (!item) return null;
-
-    // Depth-limited recursive search for thumbnailOverlays or any object that
-    // contains percentDurationWatched / resume playback info.
-    const MAX_DEPTH = 6;
-    const seen = new WeakSet();
-
-    function walk(obj, depth) {
-      if (!obj || typeof obj !== 'object' || depth > MAX_DEPTH) return null;
-      if (seen.has(obj)) return null;
-      seen.add(obj);
-
-      // If this object has thumbnailOverlays, inspect them first
-      if (Array.isArray(obj.thumbnailOverlays)) {
-        for (const ov of obj.thumbnailOverlays) {
-          // Common overlay names used across different renderers
-          const overlay =
-            ov?.thumbnailOverlayResumePlaybackRenderer ||
-            ov?.thumbnailOverlayTimeStatusRenderer ||
-            ov?.thumbnailOverlayNowPlayingRenderer ||
-            ov?.thumbnailOverlayCompactProgressRenderer ||
-            ov?.thumbnailOverlayProgressRenderer ||
-            null;
-
-          if (overlay) return overlay;
+    
+    // Check all possible renderer types
+    const checkRenderer = (renderer) => {
+      if (!renderer) return null;
+      
+      // Try multiple overlay locations
+      const overlayPaths = [
+        renderer.thumbnailOverlays,
+        renderer.header?.tileHeaderRenderer?.thumbnailOverlays,
+        renderer.thumbnail?.thumbnailOverlays
+      ];
+      
+      for (const overlays of overlayPaths) {
+        if (!Array.isArray(overlays)) continue;
+        const progressOverlay = overlays.find(o => o?.thumbnailOverlayResumePlaybackRenderer);
+        if (progressOverlay) {
+          return progressOverlay.thumbnailOverlayResumePlaybackRenderer;
         }
       }
-
-      // some renderers put overlays under header.tileHeaderRenderer.thumbnailOverlays
-      if (obj.header?.tileHeaderRenderer?.thumbnailOverlays) {
-        for (const ov of obj.header.tileHeaderRenderer.thumbnailOverlays) {
-          const overlay =
-            ov?.thumbnailOverlayResumePlaybackRenderer ||
-            ov?.thumbnailOverlayTimeStatusRenderer ||
-            ov?.thumbnailOverlayNowPlayingRenderer ||
-            ov?.thumbnailOverlayCompactProgressRenderer ||
-            ov?.thumbnailOverlayProgressRenderer ||
-            null;
-          if (overlay) return overlay;
-        }
-      }
-
-      // Sometimes progress is exposed under other keys (playlistVideoRenderer, progressBar, etc.)
-      // quick checks for common shapes:
-      if (obj.progressBar && typeof obj.progressBar === 'object') return obj.progressBar;
-      if (obj.resumePlaybackRenderer && typeof obj.resumePlaybackRenderer === 'object') return obj.resumePlaybackRenderer;
-
-      // Recursively walk properties (only objects/arrays)
-      for (const k in obj) {
-        try {
-          const v = obj[k];
-          if (v && typeof v === 'object') {
-            const found = walk(v, depth + 1);
-            if (found) return found;
-          }
-        } catch (e) { /* defensive */ }
-      }
-
       return null;
+    };
+    
+    // Try all renderer types
+    const rendererTypes = [
+      item.tileRenderer,
+      item.playlistVideoRenderer,
+      item.compactVideoRenderer,
+      item.gridVideoRenderer,
+      item.videoRenderer,
+      item.richItemRenderer?.content?.videoRenderer,
+      item.richItemRenderer?.content?.reelItemRenderer
+    ];
+    
+    for (const renderer of rendererTypes) {
+      const result = checkRenderer(renderer);
+      if (result) return result;
     }
-
-    return walk(item, 0);
+    
+    return null;
   }
   
-  // Helper: Get current page
+  // Helper: Get current page type
   function getCurrentPage() {
     const hash = location.hash ? location.hash.substring(1) : '';
     const path = location.pathname || '';
@@ -475,13 +479,11 @@ function hideVideo(items) {
     if (combined.includes('/playlist') || combined.includes('list=')) return 'playlist';
     if (combined.includes('/feed/subscriptions') || combined.includes('subscriptions') || combined.includes('abos')) return 'subscriptions';
     if (combined.includes('/feed/library') || combined.includes('library') || combined.includes('mediathek')) return 'library';
-    if (combined.includes('/results') || combined.includes('/search')) return 'search';
-    if (combined === '' || combined === '/' || combined.includes('/home')) return 'home';
-    
-    // Check for other configured pages
+    if (combined.includes('/results') || combined.includes('/search') || combined.includes('suche')) return 'search';
     if (combined.includes('music')) return 'music';
     if (combined.includes('gaming')) return 'gaming';
     if (combined.includes('more')) return 'more';
+    if (combined === '' || combined === '/' || combined.includes('/home') || combined.includes('browse')) return 'home';
     
     return 'other';
   }
@@ -490,47 +492,25 @@ function hideVideo(items) {
   const configPages = configRead('hideWatchedVideosPages') || [];
   const threshold = Number(configRead('hideWatchedVideosThreshold') || 0);
   
-  // Check if we should hide on this page
+  // Check if hiding is enabled for this page
   const shouldHideOnThisPage = configPages.length === 0 || configPages.includes(currentPage);
   
   if (!shouldHideOnThisPage) {
     return items;
   }
   
-  // Special handling for playlists
+  // Playlist-specific check
   if (currentPage === 'playlist' && !configRead('enableHideWatchedInPlaylists')) {
     return items;
   }
   
   return items.filter(item => {
     if (!item) return false;
-
+    
     const progressBar = findProgressBar(item);
-    if (!progressBar) return true; // No progress overlay -> keep item
-
-    // Normalise percent: try several common paths
-    let pct = 0;
-    // numeric percentDurationWatched (common)
-    if (typeof progressBar.percentDurationWatched !== 'undefined') {
-      pct = Number(progressBar.percentDurationWatched);
-    } else if (progressBar.progress && typeof progressBar.progress.percentDurationWatched !== 'undefined') {
-      pct = Number(progressBar.progress.percentDurationWatched);
-    } else if (progressBar.percentPlayed !== undefined) {
-      // some renderers use percentPlayed (0..1 or 0..100)
-      pct = Number(progressBar.percentPlayed);
-      if (pct > 0 && pct <= 1) pct = pct * 100;
-    } else if (progressBar.thumbnailProgress && typeof progressBar.thumbnailProgress === 'number') {
-      pct = Number(progressBar.thumbnailProgress);
-      if (pct > 0 && pct <= 1) pct = pct * 100;
-    } else if (progressBar?.style && typeof progressBar.style.width === 'string') {
-      // fallback: some data present as "style.width" like '32%'
-      const w = progressBar.style.width.match(/([\d.]+)/);
-      if (w) pct = Number(w[1]);
-    }
-
-    if (Number.isNaN(pct)) pct = 0;
-
-    // threshold is 0..100; keep if less or equal to threshold
-    return pct <= threshold;
+    if (!progressBar) return true; // No progress = keep it
+    
+    const percentWatched = Number(progressBar.percentDurationWatched || 0);
+    return percentWatched <= threshold;
   });
 }
