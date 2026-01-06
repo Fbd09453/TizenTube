@@ -9,6 +9,7 @@
 #     - dist/userScript.js  (browser userscript, bundled & minified)
 #     - dist/service.js     (DIAL service, bundled with Rollup)
 # - Publishes the package to https://www.npmjs.com on release only
+# - Purges jsDelivr CDN cache after publishing
 #
 # WHEN IT RUNS
 # ------------
@@ -19,6 +20,7 @@
 # release (published):
 #   - Builds the project
 #   - Publishes to npm
+#   - Purges jsDelivr cache
 #
 # PREREQUISITES (REQUIRED)
 # -----------------------
@@ -58,6 +60,7 @@
 # 4) When the release is published:
 #      → GitHub Actions builds
 #      → npm publish runs automatically
+#      → jsDelivr cache is purged
 #
 # -----------------------------------------------------------------------------
 
@@ -129,9 +132,25 @@ jobs:
           test -f dist/service.js
 
       # ----------------------------
-      # Publish to npm
+      # Publish to npm (release only)
       # ----------------------------
       - name: Publish package
+        #if: github.event_name == 'release'
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # ----------------------------
+      # Purge jsDelivr cache (release only)
+      # ----------------------------
+      - name: Wait for npm propagation
+        #if: github.event_name == 'release'
+        run: sleep 10
+
+      - name: Purge jsDelivr cache
+        #if: github.event_name == 'release'
+        run: |
+          echo "Purging jsDelivr cache for @krx3d/tizentube..."
+          curl -X POST "https://purge.jsdelivr.net/npm/@krx3d/tizentube@latest/package.json" || true
+          curl -X POST "https://purge.jsdelivr.net/npm/@krx3d/tizentube@*" || true
+          echo "✅ jsDelivr cache purged successfully"
