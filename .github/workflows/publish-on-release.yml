@@ -67,6 +67,10 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '.github/**'
+      #- 'docs/**'
+      #- 'README.md'
   release:
     types: [published]
 
