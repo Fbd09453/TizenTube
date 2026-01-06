@@ -92,6 +92,7 @@ jobs:
         # Examples – edit or remove these lines
         docs/**
         translations/**
+        .github/**
 
       # npm token (must be set in repo secrets)
       # NPM_TOKEN: ${{ secrets.NPM_TOKEN }}   # don't set here; provided in publish step
