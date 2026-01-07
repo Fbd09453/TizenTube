@@ -230,105 +230,150 @@ for (const key in window._yttv) {
   }
 }
 
-function processShelves(shelves, shouldAddPreviews = true) {
-  if (!Array.isArray(shelves)) return;
-  
-  for (let i = shelves.length - 1; i >= 0; i--) {
-    const shelve = shelves[i];
-    if (!shelve) continue;
-    
-    // Handle shelfRenderer
-    if (shelve.shelfRenderer) {
-      // horizontalListRenderer
-      if (shelve.shelfRenderer.content?.horizontalListRenderer?.items) {
-        const items = shelve.shelfRenderer.content.horizontalListRenderer.items;
-        
-        deArrowify(items);
-        hqify(items);
-        addLongPress(items);
-        if (shouldAddPreviews) addPreviews(items);
-        
-        // Filter shorts first
-        if (!configRead('enableShorts')) {
-          // Remove entire shorts shelf
-          if (shelve.shelfRenderer.tvhtml5ShelfRendererType === 'TVHTML5_SHELF_RENDERER_TYPE_SHORTS') {
-            shelves.splice(i, 1);
-            continue;
-          }
-          // Filter individual shorts from the items
-          shelve.shelfRenderer.content.horizontalListRenderer.items = 
-            shelve.shelfRenderer.content.horizontalListRenderer.items.filter(item => {
-              // Check multiple shorts indicators
-              if (item.tileRenderer?.tvhtml5ShelfRendererType === 'TVHTML5_TILE_RENDERER_TYPE_SHORTS') return false;
-              if (item.compactVideoRenderer?.badges?.find(b => b.metadataBadgeRenderer?.label === 'Shorts')) return false;
-              if (item.videoRenderer?.badges?.find(b => b.metadataBadgeRenderer?.label === 'Shorts')) return false;
-              if (item.playlistVideoRenderer?.badges?.find(b => b.metadataBadgeRenderer?.label === 'Shorts')) return false;
-              
-              return true;
-            });
-        }
-        
-        // Then hide watched videos
-        shelve.shelfRenderer.content.horizontalListRenderer.items = hideVideo(shelve.shelfRenderer.content.horizontalListRenderer.items);
+function processShelves(shelves, shouldAddPreviews = false) {
+  if (!Array.isArray(shelves)) return shelves;
+
+  const page = getCurrentPage();
+  const hideWatchedEnabled =
+    configRead('enableHideWatchedVideos') &&
+    configRead('hideWatchedVideosPages')?.includes(page);
+
+  for (const shelve of shelves) {
+    /* =========================
+     * GRID RENDERER (home, subs)
+     * ========================= */
+    if (shelve.gridRenderer?.items) {
+      let items = shelve.gridRenderer.items;
+
+      deArrowify(items);
+      hqify(items);
+      addLongPress(items);
+      if (shouldAddPreviews) addPreviews(items);
+
+      // Remove Shorts (server-side)
+      if (!configRead('enableShorts')) {
+        items = items.filter(item => !isShortItem(item));
       }
-      
-      // gridRenderer
-      if (shelve.shelfRenderer.content?.gridRenderer?.items) {
-        const items = shelve.shelfRenderer.content.gridRenderer.items;
-        
-        deArrowify(items);
-        hqify(items);
-        addLongPress(items);
-        if (shouldAddPreviews) addPreviews(items);
-        
-        // Filter shorts from grid
-        if (!configRead('enableShorts')) {
-          shelve.shelfRenderer.content.gridRenderer.items = 
-            shelve.shelfRenderer.content.gridRenderer.items.filter(item => {
-              if (item.gridVideoRenderer?.badges?.find(b => b.metadataBadgeRenderer?.label === 'Shorts')) return false;
-              if (item.gridPlaylistRenderer?.badges?.find(b => b.metadataBadgeRenderer?.label === 'Shorts')) return false;
-              return true;
-            });
-        }
-        
-        shelve.shelfRenderer.content.gridRenderer.items = hideVideo(shelve.shelfRenderer.content.gridRenderer.items);
+
+      // Hide watched videos
+      if (hideWatchedEnabled) {
+        items = hideVideo(items);
       }
+
+      shelve.gridRenderer.items = items;
     }
-    
-    // Handle richShelfRenderer (used heavily in subscriptions)
+
+    /* =========================
+     * RICH GRID (subscriptions, channels)
+     * ========================= */
     if (shelve.richShelfRenderer?.content?.richGridRenderer?.contents) {
-      const contents = shelve.richShelfRenderer.content.richGridRenderer.contents;
-      
+      let contents = shelve.richShelfRenderer.content.richGridRenderer.contents;
+
       deArrowify(contents);
       hqify(contents);
       addLongPress(contents);
       if (shouldAddPreviews) addPreviews(contents);
-      
-      // Filter shorts from richShelfRenderer
+
       if (!configRead('enableShorts')) {
-        shelve.richShelfRenderer.content.richGridRenderer.contents = 
-          shelve.richShelfRenderer.content.richGridRenderer.contents.filter(item => {
-            const videoRenderer = item?.richItemRenderer?.content?.videoRenderer;
-            const reelRenderer = item?.richItemRenderer?.content?.reelItemRenderer;
-            
-            // If it's a reel/short renderer, filter it out
-            if (reelRenderer) return false;
-            
-            // Check for shorts badge
-            if (videoRenderer?.badges?.find(b => b.metadataBadgeRenderer?.label === 'Shorts')) return false;
-            
-            // Check for shorts overlay
-            if (videoRenderer?.thumbnailOverlays?.find(o => 
-              o.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS'
-            )) return false;
-            
-            return true;
-          });
+        contents = contents.filter(item => !isShortItem(item));
       }
-      
-      shelve.richShelfRenderer.content.richGridRenderer.contents = hideVideo(shelve.richShelfRenderer.content.richGridRenderer.contents);
+
+      if (hideWatchedEnabled) {
+        contents = hideVideo(contents);
+      }
+
+      shelve.richShelfRenderer.content.richGridRenderer.contents = contents;
+    }
+
+    /* =========================
+     * RICH SECTION (shorts shelves)
+     * ========================= */
+    if (shelve.richSectionRenderer?.content?.richShelfRenderer) {
+      if (!configRead('enableShorts')) {
+        // Drop entire shelf if it contains Shorts
+        const shelf = shelve.richSectionRenderer.content.richShelfRenderer;
+        const contents = shelf?.content?.richGridRenderer?.contents;
+        if (Array.isArray(contents) && contents.some(isShortItem)) {
+          shelve.richSectionRenderer = null;
+        }
+      }
+    }
+
+    /* =========================
+     * VERTICAL LIST (channel pages)
+     * ========================= */
+    if (shelve.shelfRenderer?.content?.verticalListRenderer?.items) {
+      let items = shelve.shelfRenderer.content.verticalListRenderer.items;
+
+      deArrowify(items);
+      hqify(items);
+      addLongPress(items);
+      if (shouldAddPreviews) addPreviews(items);
+
+      if (!configRead('enableShorts')) {
+        items = items.filter(item => !isShortItem(item));
+      }
+
+      if (hideWatchedEnabled) {
+        items = hideVideo(items);
+      }
+
+      shelve.shelfRenderer.content.verticalListRenderer.items = items;
     }
   }
+
+  // Remove empty shelves (important to avoid blank rows)
+  return shelves.filter(s =>
+    s &&
+    (
+      s.gridRenderer?.items?.length ||
+      s.richShelfRenderer?.content?.richGridRenderer?.contents?.length ||
+      s.shelfRenderer?.content?.verticalListRenderer?.items?.length
+    )
+  );
+}
+
+function isShortItem(item) {
+  if (!item) return false;
+
+  // Explicit Shorts / Reels renderers
+  if (
+    item.reelItemRenderer ||
+    item.richItemRenderer?.content?.reelItemRenderer
+  ) {
+    return true;
+  }
+
+  const video =
+    item.videoRenderer ||
+    item.compactVideoRenderer ||
+    item.gridVideoRenderer ||
+    item.richItemRenderer?.content?.videoRenderer;
+
+  if (!video) return false;
+
+  // Shorts badge
+  if (video.badges?.some(b =>
+    b.metadataBadgeRenderer?.label === 'Shorts'
+  )) {
+    return true;
+  }
+
+  // Shorts overlay
+  if (video.thumbnailOverlays?.some(o =>
+    o.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS'
+  )) {
+    return true;
+  }
+
+  // /shorts/ URL
+  const url =
+    video.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url;
+  if (typeof url === 'string' && url.includes('/shorts/')) {
+    return true;
+  }
+
+  return false;
 }
 
 function addPreviews(items) {
@@ -443,67 +488,101 @@ function hideVideo(items) {
   if (!Array.isArray(items)) return items;
   
   // Helper: Find progress bar - based on Chrome extension approach
+  // === Replace the existing findProgressBar(item) implementation with this ===
   function findProgressBar(item) {
     if (!item) return null;
-    
-    // Try to find progress element directly
-    const progressSelectors = [
-      '#progress',
-      '.ytThumbnailOverlayProgressBarHostWatchedProgressBarSegment',
-      '.thumbnail-overlay-resume-playback-progress',
-      'ytd-thumbnail-overlay-resume-playback-renderer #progress',
-      'ytm-thumbnail-overlay-resume-playback-renderer .thumbnail-overlay-resume-playback-progress'
-    ];
-    
-    for (const selector of progressSelectors) {
-      const progressEl = item.querySelector ? item.querySelector(selector) : null;
-      if (progressEl) {
-        // Get percentage from width style
-        const width = progressEl.style.width;
-        if (width) {
-          const percent = parseFloat(width);
-          if (!isNaN(percent)) {
-            return { percentDurationWatched: percent };
+
+    const toPercent = (v) => {
+      if (typeof v === 'number') return v;
+      if (!v) return NaN;
+      // strip percent sign and try parse
+      const s = String(v).trim().replace('%', '');
+      const n = parseFloat(s);
+      if (isNaN(n)) return NaN;
+      // if value looks like 0..1 scale, convert to 0..100
+      if (n > 0 && n <= 1) return n * 100;
+      return n;
+    };
+
+    // 1) DOM-like (defensive): check for inline progress bars if item has a queryable DOM representation
+    try {
+      const progressSelectors = [
+        '#progress',
+        '.ytThumbnailOverlayProgressBarHostWatchedProgressBarSegment',
+        '.thumbnail-overlay-resume-playback-progress',
+        'ytd-thumbnail-overlay-resume-playback-renderer #progress',
+        'ytm-thumbnail-overlay-resume-playback-renderer .thumbnail-overlay-resume-playback-progress'
+      ];
+
+      if (item.querySelector) {
+        for (const sel of progressSelectors) {
+          const el = item.querySelector(sel);
+          if (el) {
+            // try style.width (e.g. "23%")
+            if (el.style && el.style.width) {
+              const p = toPercent(el.style.width);
+              if (!isNaN(p)) return { percentDurationWatched: p };
+            }
+            // some renderers expose numeric fields directly as attributes
+            const attr = el.getAttribute && el.getAttribute('data-percent');
+            if (attr) {
+              const p = toPercent(attr);
+              if (!isNaN(p)) return { percentDurationWatched: p };
+            }
           }
         }
       }
+    } catch (e) {
+      // defensive: some objects aren't queryable, ignore DOM attempt
     }
-    
-    // Fallback: Check thumbnailOverlays for resume playback renderer
-    const checkRenderer = (renderer) => {
-      if (!renderer) return null;
-      
-      const overlayPaths = [
-        renderer.thumbnailOverlays,
-        renderer.header?.tileHeaderRenderer?.thumbnailOverlays,
-        renderer.thumbnail?.thumbnailOverlays
-      ];
-      
-      for (const overlays of overlayPaths) {
-        if (!Array.isArray(overlays)) continue;
-        const progressOverlay = overlays.find(o => o?.thumbnailOverlayResumePlaybackRenderer);
-        if (progressOverlay) {
-          return progressOverlay.thumbnailOverlayResumePlaybackRenderer;
-        }
-      }
-      return null;
-    };
-    
-    const rendererTypes = [
+
+    // 2) Structured JSON renderers - inspect common renderer places for resume/playback objects or numeric fields
+    const rendererCandidates = [
       item.tileRenderer,
       item.playlistVideoRenderer,
       item.compactVideoRenderer,
       item.gridVideoRenderer,
       item.videoRenderer,
       item.richItemRenderer?.content?.videoRenderer,
-      item.richItemRenderer?.content?.reelItemRenderer
+      item.richItemRenderer?.content?.reelItemRenderer,
+      // some responses use different nesting:
+      item.videoWithContextRenderer,
+      item.commandVideoRenderer
     ];
-    
-    for (const renderer of rendererTypes) {
-      const result = checkRenderer(renderer);
-      if (result) return result;
+
+    for (const r of rendererCandidates) {
+      if (!r) continue;
+
+      // Common overlay arrays
+      const overlays = r.thumbnailOverlays || r.header?.tileHeaderRenderer?.thumbnailOverlays || r.thumbnail?.thumbnailOverlays;
+      if (Array.isArray(overlays)) {
+        for (const o of overlays) {
+          // Known resume renderer shape
+          const resume = o?.thumbnailOverlayResumePlaybackRenderer || o?.thumbnailOverlayResumePlaybackRenderer?.resumePlaybackPercent || null;
+          if (o?.thumbnailOverlayResumePlaybackRenderer) {
+            const candidate = o.thumbnailOverlayResumePlaybackRenderer;
+            // check a few possible numeric fields
+            const percent = toPercent(candidate.percentDurationWatched || candidate.percent || candidate.progressPercent || candidate.resumePlaybackPercent || candidate.width);
+            if (!isNaN(percent)) return { percentDurationWatched: percent };
+          }
+          // Some legacy/other objects may carry width in style properties
+          if (o?.style && typeof o.style === 'object' && o.style.width) {
+            const p = toPercent(o.style.width);
+            if (!isNaN(p)) return { percentDurationWatched: p };
+          }
+        }
+      }
+
+      // Some renderers contain scalar fields describing progress
+      const scalarFields = ['percentDurationWatched', 'progressPercent', 'resumePlaybackPercent', 'percentWatched', 'progress'];
+      for (const f of scalarFields) {
+        if (typeof r[f] !== 'undefined' && r[f] !== null) {
+          const p = toPercent(r[f]);
+          if (!isNaN(p)) return { percentDurationWatched: p };
+        }
+      }
     }
-    
+
     return null;
   }
   
@@ -513,7 +592,9 @@ function hideVideo(items) {
     const path = location.pathname || '';
     const search = location.search || '';
     const combined = (hash + ' ' + path + ' ' + search).toLowerCase();
-    
+
+    // Channel page detection: /@, /channel/, /c/, /user/
+    if (combined.includes('/@') || combined.includes('/channel/') || combined.includes('/c/') || combined.includes('/user/')) return 'channel';
     if (combined.includes('/playlist') || combined.includes('list=')) return 'playlist';
     if (combined.includes('/feed/subscriptions') || combined.includes('subscriptions') || combined.includes('abos')) return 'subscriptions';
     if (combined.includes('/feed/library') || combined.includes('library') || combined.includes('mediathek')) return 'library';
@@ -523,7 +604,7 @@ function hideVideo(items) {
     if (combined.includes('more')) return 'more';
     if (combined === '' || combined === '/' || combined.includes('/home') || combined.includes('browse')) return 'home';
     if (combined.includes('/watch')) return 'watch';
-    
+
     return 'other';
   }
   
