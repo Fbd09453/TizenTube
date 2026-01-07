@@ -230,150 +230,208 @@ for (const key in window._yttv) {
   }
 }
 
-function processShelves(shelves, shouldAddPreviews = false) {
-  if (!Array.isArray(shelves)) return shelves;
+// Helper to detect if an item is a Short
+function isShortItem(item) {
+  if (!item) return false;
 
-  const page = getCurrentPage();
-  const hideWatchedEnabled =
-    configRead('enableHideWatchedVideos') &&
-    configRead('hideWatchedVideosPages')?.includes(page);
+  // Check for reel renderer (explicit Shorts)
+  if (item.reelItemRenderer || item.richItemRenderer?.content?.reelItemRenderer) {
+    return true;
+  }
 
-  for (const shelve of shelves) {
-    /* =========================
-     * GRID RENDERER (home, subs)
-     * ========================= */
-    if (shelve.gridRenderer?.items) {
-      let items = shelve.gridRenderer.items;
+  // Check various video renderer types
+  const videoRenderers = [
+    item.videoRenderer,
+    item.compactVideoRenderer,
+    item.gridVideoRenderer,
+    item.richItemRenderer?.content?.videoRenderer,
+    item.tileRenderer
+  ];
 
-      deArrowify(items);
-      hqify(items);
-      addLongPress(items);
-      if (shouldAddPreviews) addPreviews(items);
+  for (const video of videoRenderers) {
+    if (!video) continue;
 
-      // Remove Shorts (server-side)
-      if (!configRead('enableShorts')) {
-        items = items.filter(item => !isShortItem(item));
-      }
-
-      // Hide watched videos
-      if (hideWatchedEnabled) {
-        items = hideVideo(items);
-      }
-
-      shelve.gridRenderer.items = items;
-    }
-
-    /* =========================
-     * RICH GRID (subscriptions, channels)
-     * ========================= */
-    if (shelve.richShelfRenderer?.content?.richGridRenderer?.contents) {
-      let contents = shelve.richShelfRenderer.content.richGridRenderer.contents;
-
-      deArrowify(contents);
-      hqify(contents);
-      addLongPress(contents);
-      if (shouldAddPreviews) addPreviews(contents);
-
-      if (!configRead('enableShorts')) {
-        contents = contents.filter(item => !isShortItem(item));
-      }
-
-      if (hideWatchedEnabled) {
-        contents = hideVideo(contents);
-      }
-
-      shelve.richShelfRenderer.content.richGridRenderer.contents = contents;
-    }
-
-    /* =========================
-     * RICH SECTION (shorts shelves)
-     * ========================= */
-    if (shelve.richSectionRenderer?.content?.richShelfRenderer) {
-      if (!configRead('enableShorts')) {
-        // Drop entire shelf if it contains Shorts
-        const shelf = shelve.richSectionRenderer.content.richShelfRenderer;
-        const contents = shelf?.content?.richGridRenderer?.contents;
-        if (Array.isArray(contents) && contents.some(isShortItem)) {
-          shelve.richSectionRenderer = null;
+    // Check for Shorts badge
+    if (video.badges) {
+      for (const badge of video.badges) {
+        if (badge.metadataBadgeRenderer?.label === 'Shorts') {
+          return true;
         }
       }
     }
 
-    /* =========================
-     * VERTICAL LIST (channel pages)
-     * ========================= */
-    if (shelve.shelfRenderer?.content?.verticalListRenderer?.items) {
-      let items = shelve.shelfRenderer.content.verticalListRenderer.items;
+    // Check for Shorts overlay
+    if (video.thumbnailOverlays) {
+      for (const overlay of video.thumbnailOverlays) {
+        if (overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS') {
+          return true;
+        }
+      }
+    }
 
+    // Check navigation endpoint for /shorts/ URL
+    const navEndpoint = video.navigationEndpoint || video.onSelectCommand;
+    const url = navEndpoint?.commandMetadata?.webCommandMetadata?.url ||
+                navEndpoint?.watchEndpoint?.videoId;
+    
+    if (url && typeof url === 'string' && url.includes('/shorts/')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function processShelves(shelves, shouldAddPreviews = true) {
+  if (!Array.isArray(shelves)) return;
+  
+  const shortsEnabled = configRead('enableShorts');
+  
+  for (let i = shelves.length - 1; i >= 0; i--) {
+    const shelve = shelves[i];
+    if (!shelve) continue;
+    
+    // Handle shelfRenderer (used in many places)
+    if (shelve.shelfRenderer) {
+      // horizontalListRenderer
+      if (shelve.shelfRenderer.content?.horizontalListRenderer?.items) {
+        let items = shelve.shelfRenderer.content.horizontalListRenderer.items;
+        
+        deArrowify(items);
+        hqify(items);
+        addLongPress(items);
+        if (shouldAddPreviews) addPreviews(items);
+        
+        // Filter shorts if disabled
+        if (!shortsEnabled) {
+          // Check if this is a shorts shelf
+          if (shelve.shelfRenderer.tvhtml5ShelfRendererType === 'TVHTML5_SHELF_RENDERER_TYPE_SHORTS') {
+            shelves.splice(i, 1);
+            continue;
+          }
+          
+          items = items.filter(item => !isShortItem(item));
+        }
+        
+        // Hide watched videos
+        items = hideVideo(items);
+        
+        shelve.shelfRenderer.content.horizontalListRenderer.items = items;
+        
+        // Remove shelf if empty
+        if (items.length === 0) {
+          shelves.splice(i, 1);
+          continue;
+        }
+      }
+      
+      // gridRenderer
+      if (shelve.shelfRenderer.content?.gridRenderer?.items) {
+        let items = shelve.shelfRenderer.content.gridRenderer.items;
+        
+        deArrowify(items);
+        hqify(items);
+        addLongPress(items);
+        if (shouldAddPreviews) addPreviews(items);
+        
+        if (!shortsEnabled) {
+          items = items.filter(item => !isShortItem(item));
+        }
+        
+        items = hideVideo(items);
+        
+        shelve.shelfRenderer.content.gridRenderer.items = items;
+        
+        if (items.length === 0) {
+          shelves.splice(i, 1);
+          continue;
+        }
+      }
+
+      // verticalListRenderer (channel pages)
+      if (shelve.shelfRenderer.content?.verticalListRenderer?.items) {
+        let items = shelve.shelfRenderer.content.verticalListRenderer.items;
+        
+        deArrowify(items);
+        hqify(items);
+        addLongPress(items);
+        if (shouldAddPreviews) addPreviews(items);
+        
+        if (!shortsEnabled) {
+          items = items.filter(item => !isShortItem(item));
+        }
+        
+        items = hideVideo(items);
+        
+        shelve.shelfRenderer.content.verticalListRenderer.items = items;
+        
+        if (items.length === 0) {
+          shelves.splice(i, 1);
+          continue;
+        }
+      }
+    }
+    
+    // Handle richShelfRenderer (subscriptions page)
+    if (shelve.richShelfRenderer?.content?.richGridRenderer?.contents) {
+      let contents = shelve.richShelfRenderer.content.richGridRenderer.contents;
+      
+      deArrowify(contents);
+      hqify(contents);
+      addLongPress(contents);
+      if (shouldAddPreviews) addPreviews(contents);
+      
+      if (!shortsEnabled) {
+        contents = contents.filter(item => !isShortItem(item));
+      }
+      
+      contents = hideVideo(contents);
+      
+      shelve.richShelfRenderer.content.richGridRenderer.contents = contents;
+      
+      if (contents.length === 0) {
+        shelves.splice(i, 1);
+        continue;
+      }
+    }
+
+    // Handle richSectionRenderer (shorts shelves on home/subs)
+    if (shelve.richSectionRenderer?.content?.richShelfRenderer) {
+      if (!shortsEnabled) {
+        const innerShelf = shelve.richSectionRenderer.content.richShelfRenderer;
+        const contents = innerShelf?.content?.richGridRenderer?.contents;
+        
+        // Check if this shelf contains shorts
+        if (Array.isArray(contents) && contents.some(item => isShortItem(item))) {
+          shelves.splice(i, 1);
+          continue;
+        }
+      }
+    }
+
+    // Handle gridRenderer at shelve level
+    if (shelve.gridRenderer?.items) {
+      let items = shelve.gridRenderer.items;
+      
       deArrowify(items);
       hqify(items);
       addLongPress(items);
       if (shouldAddPreviews) addPreviews(items);
-
-      if (!configRead('enableShorts')) {
+      
+      if (!shortsEnabled) {
         items = items.filter(item => !isShortItem(item));
       }
-
-      if (hideWatchedEnabled) {
-        items = hideVideo(items);
+      
+      items = hideVideo(items);
+      
+      shelve.gridRenderer.items = items;
+      
+      if (items.length === 0) {
+        shelves.splice(i, 1);
+        continue;
       }
-
-      shelve.shelfRenderer.content.verticalListRenderer.items = items;
     }
   }
-
-  // Remove empty shelves (important to avoid blank rows)
-  return shelves.filter(s =>
-    s &&
-    (
-      s.gridRenderer?.items?.length ||
-      s.richShelfRenderer?.content?.richGridRenderer?.contents?.length ||
-      s.shelfRenderer?.content?.verticalListRenderer?.items?.length
-    )
-  );
-}
-
-function isShortItem(item) {
-  if (!item) return false;
-
-  // Explicit Shorts / Reels renderers
-  if (
-    item.reelItemRenderer ||
-    item.richItemRenderer?.content?.reelItemRenderer
-  ) {
-    return true;
-  }
-
-  const video =
-    item.videoRenderer ||
-    item.compactVideoRenderer ||
-    item.gridVideoRenderer ||
-    item.richItemRenderer?.content?.videoRenderer;
-
-  if (!video) return false;
-
-  // Shorts badge
-  if (video.badges?.some(b =>
-    b.metadataBadgeRenderer?.label === 'Shorts'
-  )) {
-    return true;
-  }
-
-  // Shorts overlay
-  if (video.thumbnailOverlays?.some(o =>
-    o.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS'
-  )) {
-    return true;
-  }
-
-  // /shorts/ URL
-  const url =
-    video.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url;
-  if (typeof url === 'string' && url.includes('/shorts/')) {
-    return true;
-  }
-
-  return false;
 }
 
 function addPreviews(items) {
@@ -431,7 +489,6 @@ function deArrowify(items) {
   }
 }
 
-
 function hqify(items) {
   for (const item of items) {
     if (!item.tileRenderer) continue;
@@ -487,102 +544,44 @@ function hideVideo(items) {
   
   if (!Array.isArray(items)) return items;
   
-  // Helper: Find progress bar - based on Chrome extension approach
-  // === Replace the existing findProgressBar(item) implementation with this ===
+  // Helper: Find progress bar
   function findProgressBar(item) {
     if (!item) return null;
-
-    const toPercent = (v) => {
-      if (typeof v === 'number') return v;
-      if (!v) return NaN;
-      // strip percent sign and try parse
-      const s = String(v).trim().replace('%', '');
-      const n = parseFloat(s);
-      if (isNaN(n)) return NaN;
-      // if value looks like 0..1 scale, convert to 0..100
-      if (n > 0 && n <= 1) return n * 100;
-      return n;
-    };
-
-    // 1) DOM-like (defensive): check for inline progress bars if item has a queryable DOM representation
-    try {
-      const progressSelectors = [
-        '#progress',
-        '.ytThumbnailOverlayProgressBarHostWatchedProgressBarSegment',
-        '.thumbnail-overlay-resume-playback-progress',
-        'ytd-thumbnail-overlay-resume-playback-renderer #progress',
-        'ytm-thumbnail-overlay-resume-playback-renderer .thumbnail-overlay-resume-playback-progress'
+    
+    const checkRenderer = (renderer) => {
+      if (!renderer) return null;
+      
+      const overlayPaths = [
+        renderer.thumbnailOverlays,
+        renderer.header?.tileHeaderRenderer?.thumbnailOverlays,
+        renderer.thumbnail?.thumbnailOverlays
       ];
-
-      if (item.querySelector) {
-        for (const sel of progressSelectors) {
-          const el = item.querySelector(sel);
-          if (el) {
-            // try style.width (e.g. "23%")
-            if (el.style && el.style.width) {
-              const p = toPercent(el.style.width);
-              if (!isNaN(p)) return { percentDurationWatched: p };
-            }
-            // some renderers expose numeric fields directly as attributes
-            const attr = el.getAttribute && el.getAttribute('data-percent');
-            if (attr) {
-              const p = toPercent(attr);
-              if (!isNaN(p)) return { percentDurationWatched: p };
-            }
-          }
+      
+      for (const overlays of overlayPaths) {
+        if (!Array.isArray(overlays)) continue;
+        const progressOverlay = overlays.find(o => o?.thumbnailOverlayResumePlaybackRenderer);
+        if (progressOverlay) {
+          return progressOverlay.thumbnailOverlayResumePlaybackRenderer;
         }
       }
-    } catch (e) {
-      // defensive: some objects aren't queryable, ignore DOM attempt
-    }
-
-    // 2) Structured JSON renderers - inspect common renderer places for resume/playback objects or numeric fields
-    const rendererCandidates = [
+      return null;
+    };
+    
+    const rendererTypes = [
       item.tileRenderer,
       item.playlistVideoRenderer,
       item.compactVideoRenderer,
       item.gridVideoRenderer,
       item.videoRenderer,
       item.richItemRenderer?.content?.videoRenderer,
-      item.richItemRenderer?.content?.reelItemRenderer,
-      // some responses use different nesting:
-      item.videoWithContextRenderer,
-      item.commandVideoRenderer
+      item.richItemRenderer?.content?.reelItemRenderer
     ];
-
-    for (const r of rendererCandidates) {
-      if (!r) continue;
-
-      // Common overlay arrays
-      const overlays = r.thumbnailOverlays || r.header?.tileHeaderRenderer?.thumbnailOverlays || r.thumbnail?.thumbnailOverlays;
-      if (Array.isArray(overlays)) {
-        for (const o of overlays) {
-          // Known resume renderer shape
-          const resume = o?.thumbnailOverlayResumePlaybackRenderer || o?.thumbnailOverlayResumePlaybackRenderer?.resumePlaybackPercent || null;
-          if (o?.thumbnailOverlayResumePlaybackRenderer) {
-            const candidate = o.thumbnailOverlayResumePlaybackRenderer;
-            // check a few possible numeric fields
-            const percent = toPercent(candidate.percentDurationWatched || candidate.percent || candidate.progressPercent || candidate.resumePlaybackPercent || candidate.width);
-            if (!isNaN(percent)) return { percentDurationWatched: percent };
-          }
-          // Some legacy/other objects may carry width in style properties
-          if (o?.style && typeof o.style === 'object' && o.style.width) {
-            const p = toPercent(o.style.width);
-            if (!isNaN(p)) return { percentDurationWatched: p };
-          }
-        }
-      }
-
-      // Some renderers contain scalar fields describing progress
-      const scalarFields = ['percentDurationWatched', 'progressPercent', 'resumePlaybackPercent', 'percentWatched', 'progress'];
-      for (const f of scalarFields) {
-        if (typeof r[f] !== 'undefined' && r[f] !== null) {
-          const p = toPercent(r[f]);
-          if (!isNaN(p)) return { percentDurationWatched: p };
-        }
-      }
+    
+    for (const renderer of rendererTypes) {
+      const result = checkRenderer(renderer);
+      if (result) return result;
     }
-
+    
     return null;
   }
   
@@ -592,19 +591,18 @@ function hideVideo(items) {
     const path = location.pathname || '';
     const search = location.search || '';
     const combined = (hash + ' ' + path + ' ' + search).toLowerCase();
-
-    // Channel page detection: /@, /channel/, /c/, /user/
-    if (combined.includes('/@') || combined.includes('/channel/') || combined.includes('/c/') || combined.includes('/user/')) return 'channel';
+    
     if (combined.includes('/playlist') || combined.includes('list=')) return 'playlist';
     if (combined.includes('/feed/subscriptions') || combined.includes('subscriptions') || combined.includes('abos')) return 'subscriptions';
     if (combined.includes('/feed/library') || combined.includes('library') || combined.includes('mediathek')) return 'library';
     if (combined.includes('/results') || combined.includes('/search') || combined.includes('suche')) return 'search';
+    if (combined.includes('/@') || combined.includes('/channel/') || combined.includes('/c/') || combined.includes('/user/')) return 'channel';
     if (combined.includes('music')) return 'music';
     if (combined.includes('gaming')) return 'gaming';
     if (combined.includes('more')) return 'more';
     if (combined === '' || combined === '/' || combined.includes('/home') || combined.includes('browse')) return 'home';
     if (combined.includes('/watch')) return 'watch';
-
+    
     return 'other';
   }
   
