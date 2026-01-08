@@ -1,3 +1,91 @@
+# -----------------------------------------------------------------------------
+# Build, publish, and cleanup TizenTube on npm
+#
+# WHAT THIS WORKFLOW DOES
+# -----------------------
+# - Runs on every push to the `main` branch (build + verification)
+# - Runs again when a GitHub Release is published (build + npm publish + cleanup)
+# - Builds:
+#     - dist/userScript.js  (browser userscript, bundled & minified)
+#     - dist/service.js     (DIAL service, bundled with Rollup)
+# - Publishes the package to https://www.npmjs.com on release only
+# - Automatically removes old versions from npm (within 72-hour window)
+# - Deprecates older versions (beyond 72-hour window) if any remain
+# - Purges jsDelivr CDN cache after publishing
+#
+# WHEN IT RUNS
+# ------------
+# push to main:
+#   - Builds the project
+#   - Does NOT publish to npm
+#
+# release (published):
+#   - Builds the project
+#   - Publishes to npm
+#   - Removes old versions (≤72 hours old, keeps current version only)
+#   - Deprecates very old versions (>72 hours, if unpublish fails)
+#   - Purges jsDelivr cache
+#
+# AUTOMATIC VERSION CLEANUP
+# -------------------------
+# After publishing a new version, this workflow automatically:
+# - Identifies all versions except the newly published one
+# - Unpublishes versions that are ≤72 hours old (npm policy allows this)
+# - Deprecates versions >72 hours old (unpublish no longer allowed)
+# - Result: Only the latest version remains active on npm
+#
+# Note: npm allows unpublishing versions within ~72 hours of publication.
+# After that window, versions can only be deprecated, not removed.
+#
+# PREREQUISITES (REQUIRED)
+# -----------------------
+# 1) Create an npm account:
+#    https://www.npmjs.com/signup
+#
+# 2) Create an npm access token:
+#    - npm → Profile → Access Tokens
+#    - Click "Generate New Token"
+#    - Token name: anything you want
+#    - CHECK: "Bypass two-factor authentication (2FA)"
+#    - Packages and scopes:
+#        - Permissions: Read and Write
+#        - Scope: All packages
+#    - Expiration date: e.g. 90 days
+#    - Click "Generate token" and COPY it
+#
+# 3) Add the token to GitHub Secrets:
+#    - GitHub repository → Settings
+#    - Security → Secrets and variables → Actions
+#    - Repository secrets → New repository secret
+#        Name:   NPM_TOKEN
+#        Secret: <paste npm token here>
+#
+# PACKAGE REQUIREMENTS
+# --------------------
+# - package.json must contain a unique name, e.g.:
+#     "@krx3d/tizentube"
+# - The version MUST be increased before each release
+#   (npm will reject duplicate versions)
+#
+# HOW TO PUBLISH A NEW VERSION
+# ----------------------------
+# 1) Bump "version" in package.json
+# 2) Commit and push to `main`
+# 3) Create a GitHub Release
+# 4) When the release is published:
+#      → GitHub Actions builds
+#      → npm publish runs automatically
+#      → Old versions are automatically removed
+#      → jsDelivr cache is purged
+#
+# CONFIGURATION
+# -------------
+# - PACKAGE_NAME: Set to your npm package name (e.g., '@krx3d/tizentube')
+# - NODE_VERSION: Node.js version to use (default: '20')
+# - UNPUBLISH_WINDOW_HOURS: How long versions can be unpublished (default: '72')
+#
+# -----------------------------------------------------------------------------
+
 name: Build, publish (on release) and cleanup old npm versions
 
 on:
