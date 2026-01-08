@@ -695,66 +695,66 @@ export default function modernUI(update, parameters) {
             },
             options: [
                 {
-                name: 'Enable Remote Logging',
-                icon: 'BROADCAST',
-                value: 'enableRemoteLogging'
+                    name: 'Enable Remote Logging',
+                    icon: 'BROADCAST',
+                    value: 'enableRemoteLogging'
                 },
                 {
-                name: 'Configure Syslog Server',
-                icon: 'SETTINGS',
-                value: null,
-                menuId: 'tt-syslog-config',
-                menuHeader: {
-                    title: 'Syslog Server Configuration',
-                    subtitle: 'Enter your PC\'s IP address and port'
+                    name: 'Configure Syslog Server',
+                    icon: 'SETTINGS',
+                    value: null,
+                    menuId: 'tt-syslog-config',
+                    menuHeader: {
+                        title: 'Syslog Server Configuration',
+                        subtitle: 'Enter your PC\'s IP address and port'
                 },
                 options: [
                     {
-                    name: 'Server IP Address',
-                    icon: 'LINK',
-                    subtitle: configRead('syslogServerIp') || '192.168.1.100',
-                    value: null,
-                    options: {
-                        title: 'Syslog Server IP',
-                        subtitle: 'Enter your PC\'s IP address (e.g., 192.168.1.100)\n\nCurrent: ' + (configRead('syslogServerIp') || '192.168.1.100') + '\n\nNote: You need to edit this in the config manually.\nPress the remote\'s number keys or use the keyboard.',
-                        content: overlayMessageRenderer(
-                        'To change the IP address:\n\n' +
-                        '1. Note your PC\'s IP from the syslog server\n' +
-                        '2. Go to Settings > TizenTube Settings\n' +
-                        '3. Navigate with remote to highlight this option\n' +
-                        '4. Unfortunately, text input is limited on TV remotes\n\n' +
-                        'Current IP: ' + (configRead('syslogServerIp') || '192.168.1.100') + '\n' +
-                        'Current Port: ' + (configRead('syslogServerPort') || 514)
-                        )
-                    }
+                        name: 'Server IP Address',
+                        icon: 'LINK',
+                        subtitle: configRead('syslogServerIp') || '192.168.1.100',
+                        value: null,
+                        options: {
+                            title: 'Syslog Server IP',
+                            subtitle: 'Enter your PC\'s IP address (e.g., 192.168.1.100)\n\nCurrent: ' + (configRead('syslogServerIp') || '192.168.1.100') + '\n\nNote: You need to edit this in the config manually.\nPress the remote\'s number keys or use the keyboard.',
+                            content: overlayMessageRenderer(
+                            'To change the IP address:\n\n' +
+                            '1. Note your PC\'s IP from the syslog server\n' +
+                            '2. Go to Settings > TizenTube Settings\n' +
+                            '3. Navigate with remote to highlight this option\n' +
+                            '4. Unfortunately, text input is limited on TV remotes\n\n' +
+                            'Current IP: ' + (configRead('syslogServerIp') || '192.168.1.100') + '\n' +
+                            'Current Port: ' + (configRead('syslogServerPort') || 514)
+                            )
+                        }
                     },
                     {
-                    name: 'Server Port',
-                    icon: 'SETTINGS',
-                    value: null,
-                    menuId: 'tt-syslog-port',
-                    menuHeader: {
-                        title: 'Syslog Server Port',
-                        subtitle: 'Select port number (default: 514)'
-                    },
-                    options: [514, 8080, 3000, 5000, 9000].map((port) => {
-                        return {
-                        name: `Port ${port}`,
-                        key: 'syslogServerPort',
-                        value: port
-                        }
-                    })
+                        name: 'Server Port',
+                        icon: 'SETTINGS',
+                        value: null,
+                        menuId: 'tt-syslog-port',
+                        menuHeader: {
+                            title: 'Syslog Server Port',
+                            subtitle: 'Select port number (default: 514)'
+                        },
+                        options: [514, 8080, 3000, 5000, 9000].map((port) => {
+                            return {
+                            name: `Port ${port}`,
+                            key: 'syslogServerPort',
+                            value: port
+                            }
+                        })
                     }
                 ]
                 },
                 {
-                name: 'Quick Setup Presets',
-                icon: 'SETTINGS',
-                value: null,
-                menuId: 'tt-syslog-presets',
-                menuHeader: {
-                    title: 'Quick IP Presets',
-                    subtitle: 'Common local network IP ranges'
+                    name: 'Quick Setup Presets',
+                    icon: 'SETTINGS',
+                    value: null,
+                    menuId: 'tt-syslog-presets',
+                    menuHeader: {
+                        title: 'Quick IP Presets',
+                        subtitle: 'Common local network IP ranges'
                 },
                 options: [
                     // Common router IP ranges
@@ -776,13 +776,13 @@ export default function modernUI(update, parameters) {
                 ]
                 },
                 {
-                name: 'Log Level',
-                icon: 'SETTINGS',
-                value: null,
-                menuId: 'tt-log-level',
-                menuHeader: {
-                    title: 'Log Level',
-                    subtitle: 'Set minimum log level to send'
+                    name: 'Log Level',
+                    icon: 'SETTINGS',
+                    value: null,
+                    menuId: 'tt-log-level',
+                    menuHeader: {
+                        title: 'Log Level',
+                        subtitle: 'Set minimum log level to send'
                 },
                 options: ['DEBUG', 'INFO', 'WARN', 'ERROR'].map((level) => {
                     return {
