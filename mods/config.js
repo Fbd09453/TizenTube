@@ -51,7 +51,7 @@ const defaultConfig = {
   disabledSidebarContents: ['TROPHY', 'NEWS', 'YOUTUBE_MUSIC', 'BROADCAST', 'CLAPPERBOARD', 'LIVE', 'GAMING', 'TAB_MORE'],
   enableUpdater: true,
   enableRemoteLogging: false,
-  syslogServerUrl: '192.168.70.124',
+  syslogServerIp: '192.168.70.124',
   syslogServerPort: 514,             // Port number
   logLevel: 'INFO' // DEBUG, INFO, WARN, ERROR
 };

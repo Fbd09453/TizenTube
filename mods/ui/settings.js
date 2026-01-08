@@ -4,6 +4,85 @@ import { getUserLanguageOptionName } from '../features/moreSubtitles.js';
 import qrcode from 'qrcode-npm';
 
 export default function modernUI(update, parameters) {
+    // ---------- Helpers for syslog nested menus ----------
+    function buildFinalFourthOptions(firstOctet, secondOctet, thirdOctet, rangeStart, rangeEnd) {
+        // returns an array of option objects for each final ip (value: 'a.b.c.d')
+        const buttons = [];
+        for (let v = rangeStart; v <= rangeEnd; v++) {
+            const ip = `${firstOctet}.${secondOctet}.${thirdOctet}.${v}`;
+            buttons.push({
+                name: ip,
+                key: 'syslogServerIp',
+                value: ip
+            });
+        }
+        return buttons;
+    }
+
+    function buildFourthGroupOptions(firstOctet, secondOctet, thirdOctet) {
+        // returns array of objects representing groups of 16 (0-15, 16-31...)
+        const groups = [];
+        for (let base = 0; base <= 240; base += 16) {
+            const start = base;
+            const end = base + 15;
+            groups.push({
+                name: `${start} - ${end}`,
+                options: buildFinalFourthOptions(firstOctet, secondOctet, thirdOctet, start, end)
+            });
+        }
+        return groups;
+    }
+
+    function buildThirdListOptions(firstOctet, secondOctet, rangeStart, rangeEnd) {
+        // returns array of objects for each third octet in [rangeStart, rangeEnd]
+        const thirdList = [];
+        for (let t = rangeStart; t <= rangeEnd; t++) {
+            thirdList.push({
+                name: `${t}`,
+                subtitle: `${firstOctet}.${secondOctet}.${t}.x`,
+                options: buildFourthGroupOptions(firstOctet, secondOctet, t)
+            });
+        }
+        return thirdList;
+    }
+
+    function buildThirdRangeOptions(firstOctet, secondOctet) {
+        // create the 4 major ranges for third octet: 0-63,64-127,128-191,192-255
+        const ranges = [
+            { s: 0, e: 63 },
+            { s: 64, e: 127 },
+            { s: 128, e: 191 },
+            { s: 192, e: 255 }
+        ];
+        return ranges.map(r => ({
+            name: `${r.s} - ${r.e}`,
+            subtitle: `Third-octet range for ${firstOctet}.${secondOctet}.x`,
+            options: buildThirdListOptions(firstOctet, secondOctet, r.s, r.e)
+        }));
+    }
+
+    function buildPrefixOptions() {
+        // Common prefix candidates; can be extended
+        const candidates = [
+            { first: 192, second: 168 },
+            { first: 10, second: 0 },
+            { first: 172, second: 16 },
+            { first: 169, second: 254 } // link-local/example
+        ];
+
+        return candidates.map(c => ({
+            name: `${c.first}.${c.second}.x.x`,
+            subtitle: `Pick third and fourth octet for ${c.first}.${c.second}.x.x`,
+            options: buildThirdRangeOptions(c.first, c.second)
+        }));
+    }
+
+    function showModalNotification(title, message) {
+        showModal({ title, subtitle: message }, overlayMessageRenderer(message), 'tt-syslog-notify', false);
+    }
+
+    // ---------- End syslog helpers ----------
+
     const settings = [
         {
             name: 'Support TizenTube',
@@ -449,6 +528,10 @@ export default function modernUI(update, parameters) {
                                 {
                                     name: 'More',
                                     value: 'more'
+                                },
+                                {
+                                    name: 'Watch',
+                                    value: 'watch'
                                 }
                             ]
                         }
@@ -685,6 +768,8 @@ export default function modernUI(update, parameters) {
                 }
             ]
         },
+
+        // ======= Developer Options (REPLACED) =======
         {
             name: 'Developer Options',
             icon: 'SETTINGS',
@@ -707,123 +792,119 @@ export default function modernUI(update, parameters) {
                     menuHeader: {
                         title: 'Syslog Server Configuration',
                         subtitle: 'Enter your PC\'s IP address and port'
-                },
-                options: [
-                    {
-                        name: 'Server IP Address',
-                        icon: 'LINK',
-                        subtitle: configRead('syslogServerIp') || '192.168.1.100',
-                        value: null,
-                        options: {
-                            title: 'Syslog Server IP',
-                            subtitle: 'Enter your PC\'s IP address (e.g., 192.168.1.100)\n\nCurrent: ' + (configRead('syslogServerIp') || '192.168.1.100') + '\n\nNote: You need to edit this in the config manually.\nPress the remote\'s number keys or use the keyboard.',
-                            content: overlayMessageRenderer(
-                            'To change the IP address:\n\n' +
-                            '1. Note your PC\'s IP from the syslog server\n' +
-                            '2. Go to Settings > TizenTube Settings\n' +
-                            '3. Navigate with remote to highlight this option\n' +
-                            '4. Unfortunately, text input is limited on TV remotes\n\n' +
-                            'Current IP: ' + (configRead('syslogServerIp') || '192.168.1.100') + '\n' +
-                            'Current Port: ' + (configRead('syslogServerPort') || 514)
-                            )
-                        }
                     },
-                    {
-                        name: 'Server Port',
-                        icon: 'SETTINGS',
-                        value: null,
-                        menuId: 'tt-syslog-port',
-                        menuHeader: {
-                            title: 'Syslog Server Port',
-                            subtitle: 'Select port number (default: 514)'
-                        },
-                        options: [514, 8080, 3000, 5000, 9000].map((port) => {
-                            return {
-                            name: `Port ${port}`,
-                            key: 'syslogServerPort',
-                            value: port
-                            }
-                        })
-                    }
-                ]
-                },
-                {
-                    name: 'Quick Setup Presets',
-                    icon: 'SETTINGS',
-                    value: null,
-                    menuId: 'tt-syslog-presets',
-                    menuHeader: {
-                        title: 'Quick IP Presets',
-                        subtitle: 'Common local network IP ranges'
-                },
-                options: [
-                    // Common router IP ranges
-                    ...Array.from({length: 10}, (_, i) => ({
-                    name: `192.168.1.${100 + i}`,
-                    key: 'syslogServerIp',
-                    value: `192.168.1.${100 + i}`
-                    })),
-                    ...Array.from({length: 10}, (_, i) => ({
-                    name: `192.168.0.${100 + i}`,
-                    key: 'syslogServerIp',
-                    value: `192.168.0.${100 + i}`
-                    })),
-                    ...Array.from({length: 10}, (_, i) => ({
-                    name: `192.168.70.${100 + i}`,
-                    key: 'syslogServerIp',
-                    value: `192.168.70.${100 + i}`
-                    })),
-                ]
-                },
-                {
-                    name: 'Log Level',
-                    icon: 'SETTINGS',
-                    value: null,
-                    menuId: 'tt-log-level',
-                    menuHeader: {
-                        title: 'Log Level',
-                        subtitle: 'Set minimum log level to send'
-                },
-                options: ['DEBUG', 'INFO', 'WARN', 'ERROR'].map((level) => {
-                    return {
-                    name: level,
-                    icon: level === 'DEBUG' ? 'SETTINGS' : level === 'ERROR' ? 'ERROR' : 'INFO',
-                    key: 'logLevel',
-                    value: level
-                    }
-                })
-                },
-                {
-                name: 'Test Connection',
-                icon: 'BROADCAST',
-                value: null,
-                options: {
-                    title: 'Test Syslog Connection',
-                    subtitle: 'Testing connection to ' + (configRead('syslogServerIp') || '192.168.1.100') + ':' + (configRead('syslogServerPort') || 514),
-                    content: scrollPaneRenderer([
-                    overlayMessageRenderer('A test log will be sent to your syslog server.'),
-                    overlayMessageRenderer('Check your PC terminal to see if the log appears.'),
-                    buttonItem(
-                        { title: 'Send Test Log', subtitle: 'Click to send a test message' },
-                        { icon: 'BROADCAST' },
-                        [
+                    options: [
                         {
-                            customAction: {
-                            action: 'TEST_SYSLOG_CONNECTION'
-                            }
+                            name: 'Server IP Address (Quick Presets)',
+                            icon: 'LINK',
+                            value: null,
+                            options: buildPrefixOptions()
                         },
                         {
-                            signalAction: {
-                            signal: 'POPUP_BACK'
+                            name: 'Server IP Address (Legacy Quick Presets)',
+                            icon: 'LINK',
+                            value: null,
+                            menuId: 'tt-syslog-presets-legacy',
+                            options: [
+                                ...Array.from({length: 10}, (_, i) => ({
+                                    name: `192.168.1.${100 + i}`,
+                                    key: 'syslogServerIp',
+                                    value: `192.168.1.${100 + i}`
+                                })),
+                                ...Array.from({length: 10}, (_, i) => ({
+                                    name: `192.168.0.${100 + i}`,
+                                    key: 'syslogServerIp',
+                                    value: `192.168.0.${100 + i}`
+                                }))
+                            ]
+                        },
+                        {
+                            name: 'Server Port',
+                            icon: 'SETTINGS',
+                            value: null,
+                            menuId: 'tt-syslog-port',
+                            menuHeader: {
+                                title: 'Syslog Server Port',
+                                subtitle: 'Select port number (default: 514)'
+                            },
+                            options: [514, 8080, 3000, 5000, 9000].map((port) => {
+                                return {
+                                    name: `Port ${port}`,
+                                    key: 'syslogServerPort',
+                                    value: port
+                                }
+                            })
+                        },
+                        {
+                            name: 'Log Level',
+                            icon: 'SETTINGS',
+                            value: null,
+                            menuId: 'tt-log-level',
+                            menuHeader: {
+                                title: 'Log Level',
+                                subtitle: 'Set minimum log level to send'
+                            },
+                            options: ['DEBUG', 'INFO', 'WARN', 'ERROR'].map((level) => {
+                                return {
+                                    name: level,
+                                    icon: level === 'DEBUG' ? 'SETTINGS' : level === 'ERROR' ? 'ERROR' : 'INFO',
+                                    key: 'logLevel',
+                                    value: level
+                                }
+                            })
+                        },
+                        {
+                            name: 'Test Connection',
+                            icon: 'BROADCAST',
+                            value: null,
+                            options: {
+                                title: 'Test Syslog Connection',
+                                subtitle: 'Testing connection to ' + (configRead('syslogServerIp') || '192.168.1.100') + ':' + (configRead('syslogServerPort') || 514),
+                                content: scrollPaneRenderer([
+                                    overlayMessageRenderer('A test log will be sent to your syslog server.'),
+                                    overlayMessageRenderer('Check your PC terminal to see if the log appears.'),
+                                    buttonItem(
+                                        { title: 'Send Test Log', subtitle: 'Click to send a test message' },
+                                        { icon: 'BROADCAST' },
+                                        [
+                                            {
+                                                customAction: {
+                                                    action: 'TEST_SYSLOG_CONNECTION'
+                                                }
+                                            },
+                                            {
+                                                signalAction: {
+                                                    signal: 'POPUP_BACK'
+                                                }
+                                            }
+                                        ]
+                                    )
+                                ])
                             }
                         }
-                        ]
-                    )
-                    ])
-                }
+                    ]
+                },
+                {
+                    name: 'Quick Setup Presets (legacy buttons)',
+                    icon: 'SETTINGS',
+                    value: null,
+                    menuId: 'tt-syslog-presets-legacy-2',
+                    options: [
+                        ...Array.from({length: 10}, (_, i) => ({
+                            name: `192.168.1.${50 + i}`,
+                            key: 'syslogServerIp',
+                            value: `192.168.1.${50 + i}`
+                        })),
+                        ...Array.from({length: 10}, (_, i) => ({
+                            name: `10.0.0.${10 + i}`,
+                            key: 'syslogServerIp',
+                            value: `10.0.0.${10 + i}`
+                        }))
+                    ]
                 }
             ]
-            },
+        },
+
         window.h5vcc && window.h5vcc.tizentube ?
             {
                 name: 'TizenTube Cobalt Updater',
