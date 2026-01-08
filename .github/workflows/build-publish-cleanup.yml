@@ -98,7 +98,7 @@ on:
     types: [published]
 
 env:
-  PACKAGE_NAME: '@krx3d/tizentube'
+  PACKAGE_NAME: '@krx3d/tizentube2'
   NODE_VERSION: '20'
   UNPUBLISH_WINDOW_HOURS: '72'
 

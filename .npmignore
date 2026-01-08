@@ -1,5 +1,5 @@
-.github/
-.github/**
+.github/workflows/
+.github/workflows/**
 node_modules
 mods
 service
