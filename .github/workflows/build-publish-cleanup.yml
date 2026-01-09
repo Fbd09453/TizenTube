@@ -126,6 +126,12 @@ jobs:
       # ----------------------------
       # Build mods (userScript.js)
       # ----------------------------
+      - name: Clean dist
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist
+
       - name: Install mods dependencies
         run: |
           set -euo pipefail
