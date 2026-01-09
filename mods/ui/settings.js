@@ -1095,7 +1095,6 @@ export function optionShow(parameters, update) {
             );
         }
     } else {
-        // New handling for boolean-based options (like subtitle localization)
         let index = 0;
         for (const option of parameters.options) {
             if (option.compactLinkRenderer) {
