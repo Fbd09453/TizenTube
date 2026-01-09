@@ -1,7 +1,8 @@
-// Remote Syslog Logger for TizenTube - FIXED VERSION
+// WebSocket Logger for TizenTube
+
 import { configRead, configChangeEmitter } from '../config.js';
 
-class SyslogLogger {
+class WebSocketLogger {
   constructor() {
     this.enabled = false;
     this.serverUrl = '';
@@ -12,8 +13,11 @@ class SyslogLogger {
     this.batchTimer = null;
     this.lastError = null;
     this.connectionTested = false;
+    this.ws = null;
+    this.reconnectTimer = null;
+    this.reconnectInterval = 5000;
 
-    // Listen for config changes so the logger re-initializes automatically
+    // Listen for config changes
     try {
       configChangeEmitter.addEventListener('configChange', (ev) => {
         const key = ev.detail && ev.detail.key;
@@ -33,20 +37,20 @@ class SyslogLogger {
       this.enabled = configRead('enableRemoteLogging') || false;
 
       const ip = configRead('syslogServerIp') || '192.168.1.100';
-      const port = configRead('syslogServerPort') || 514;
-      this.serverUrl = `http://${ip}:${port}`; // keep without trailing slash
+      const port = configRead('syslogServerPort') || 8081; // WebSocket port
+      this.serverUrl = `ws://${ip}:${port}`;
 
       this.logLevel = configRead('logLevel') || 'INFO';
 
       if (this.enabled) {
-        console.log(`[Logger] ✓ Remote logging ENABLED`);
+        console.log(`[Logger] ✓ Remote logging ENABLED (WebSocket)`);
         console.log(`[Logger] → Server: ${this.serverUrl}`);
         console.log(`[Logger] → Log Level: ${this.logLevel}`);
+        this.connect();
         this.startBatchTimer();
-
-        // Don't send test on init, wait for explicit test
       } else {
         console.log('[Logger] ✗ Remote logging DISABLED');
+        this.disconnect();
         if (this.batchTimer) {
           clearInterval(this.batchTimer);
           this.batchTimer = null;
@@ -58,15 +62,82 @@ class SyslogLogger {
     }
   }
 
-  // Call this when settings change
   reinitialize() {
     console.log('[Logger] Re-initializing with new settings...');
+    this.disconnect();
     if (this.batchTimer) {
       clearInterval(this.batchTimer);
       this.batchTimer = null;
     }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.logQueue = [];
     this.init();
+  }
+
+  connect() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      return; // Already connected
+    }
+
+    try {
+      console.log(`[Logger] Connecting to ${this.serverUrl}...`);
+      this.ws = new WebSocket(this.serverUrl);
+
+      this.ws.onopen = () => {
+        console.log('[Logger] ✓ WebSocket connected');
+        this.lastError = null;
+        this.connectionTested = true;
+        
+        // Flush any queued logs
+        if (this.logQueue.length > 0) {
+          this.flush();
+        }
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const response = JSON.parse(event.data);
+          console.log('[Logger] Server response:', response);
+        } catch (e) {
+          console.log('[Logger] Server message:', event.data);
+        }
+      };
+
+      this.ws.onerror = (error) => {
+        console.error('[Logger] WebSocket error:', error);
+        this.lastError = 'WebSocket connection error';
+      };
+
+      this.ws.onclose = () => {
+        console.log('[Logger] WebSocket disconnected');
+        this.ws = null;
+        
+        // Auto-reconnect if logging is enabled
+        if (this.enabled && !this.reconnectTimer) {
+          this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.connect();
+          }, this.reconnectInterval);
+        }
+      };
+    } catch (error) {
+      console.error('[Logger] Failed to create WebSocket:', error);
+      this.lastError = error.message;
+    }
+  }
+
+  disconnect() {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
   }
 
   startBatchTimer() {
@@ -97,13 +168,18 @@ class SyslogLogger {
     };
   }
 
-  async sendBatch(logs) {
+  sendBatch(logs) {
     if (!this.enabled || !this.serverUrl) {
       console.log('[Logger] Cannot send: logging disabled or no server URL');
       return false;
     }
 
-    console.log(`[Logger] → Sending ${logs.length} logs to ${this.serverUrl}...`);
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.log('[Logger] WebSocket not connected, queuing logs...');
+      return false;
+    }
+
+    console.log(`[Logger] → Sending ${logs.length} logs via WebSocket...`);
 
     try {
       const payload = {
@@ -112,61 +188,28 @@ class SyslogLogger {
         version: window.h5vcc?.tizentube?.GetVersion() || 'unknown'
       };
 
-      console.log('[Logger] Payload:', JSON.stringify(payload, null, 2));
-
-      const response = await fetch(this.serverUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        this.lastError = `HTTP ${response.status}: ${response.statusText}`;
-        console.error(`[Logger] ✗ Failed to send logs: ${this.lastError}`);
-        return false;
-      }
-
-      // Try to parse JSON but be tolerant
-      let result = null;
-      try { result = await response.json(); } catch (_) { result = null; }
-
-      console.log(`[Logger] ✓ Successfully sent ${logs.length} logs`, result);
+      this.ws.send(JSON.stringify(payload));
+      console.log(`[Logger] ✓ Sent ${logs.length} logs`);
       this.lastError = null;
-      this.connectionTested = true;
       return true;
     } catch (error) {
       this.lastError = error.message;
       console.error('[Logger] ✗ Error sending logs:', error);
-      console.error('[Logger] Server URL:', this.serverUrl);
-      console.error('[Logger] Error details:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      });
       return false;
     }
   }
 
   log(level, category, message, data) {
-    // Always log to console with color coding
     const consoleMethod = level === 'ERROR' ? 'error' :
-      level === 'WARN' ? 'warn' :
-        level === 'DEBUG' ? 'debug' : 'log';
+                         level === 'WARN' ? 'warn' :
+                         level === 'DEBUG' ? 'debug' : 'log';
 
-    console[consoleMethod](
-      `[${category}]`,
-      message,
-      data || ''
-    );
+    console[consoleMethod](`[${category}]`, message, data || '');
 
-    // Send to remote syslog if enabled
     if (this.enabled && this.shouldLog(level)) {
       const logEntry = this.formatMessage(level, category, message, data);
       this.logQueue.push(logEntry);
 
-      // Flush immediately if queue is full or if it's an error
       if (this.logQueue.length >= this.maxBatchSize || level === 'ERROR') {
         this.flush();
       }
@@ -198,77 +241,80 @@ class SyslogLogger {
     this.log('ERROR', category, message, data);
   }
 
-  // TEST CONNECTION METHOD - Call this from the settings UI
   async testConnection() {
     console.log('[Logger] ═══════════════════════════════════════');
-    console.log('[Logger] Testing connection to syslog server...');
+    console.log('[Logger] Testing WebSocket connection...');
     console.log('[Logger] ═══════════════════════════════════════');
 
-    // Read current config (allow test even if enableRemoteLogging === false)
-    const ip = configRead('syslogServerIp') || '192.168.50.98';
-    const port = configRead('syslogServerPort') || 8080;
-    const url = `http://${ip}:${port}`;
+    const ip = configRead('syslogServerIp') || '192.168.1.100';
+    const port = configRead('syslogServerPort') || 8081;
+    const url = `ws://${ip}:${port}`;
 
-    console.log(`[Logger] → Attempting test POST to: ${url} (enableRemoteLogging=${configRead('enableRemoteLogging')})`);
+    console.log(`[Logger] → Attempting connection to: ${url}`);
 
-    const testLog = this.formatMessage(
-      'INFO',
-      'CONNECTION_TEST',
-      '🧪 This is a TEST connection from TizenTube',
-      {
-        testId: Math.random().toString(36).substr(2, 9),
-        timestamp: new Date().toISOString(),
-        serverIp: ip,
-        serverPort: port
+    return new Promise((resolve) => {
+      try {
+        const testWs = new WebSocket(url);
+        
+        const timeout = setTimeout(() => {
+          testWs.close();
+          resolve({
+            success: false,
+            error: 'Connection timeout (5s)'
+          });
+        }, 5000);
+
+        testWs.onopen = () => {
+          clearTimeout(timeout);
+          
+          const testLog = this.formatMessage(
+            'INFO',
+            'CONNECTION_TEST',
+            '🧪 WebSocket connection test from TizenTube',
+            {
+              testId: Math.random().toString(36).substr(2, 9),
+              timestamp: new Date().toISOString(),
+              serverIp: ip,
+              serverPort: port
+            }
+          );
+
+          const payload = {
+            logs: [testLog],
+            source: 'TizenTube-Test',
+            version: window.h5vcc?.tizentube?.GetVersion() || 'unknown'
+          };
+
+          testWs.send(JSON.stringify(payload));
+          
+          setTimeout(() => {
+            testWs.close();
+            console.log('[Logger] ✓ CONNECTION TEST SUCCESSFUL!');
+            resolve({
+              success: true,
+              message: 'Connection successful! Check your PC terminal.'
+            });
+          }, 500);
+        };
+
+        testWs.onerror = (error) => {
+          clearTimeout(timeout);
+          console.error('[Logger] ✗ Connection error:', error);
+          resolve({
+            success: false,
+            error: 'WebSocket connection failed'
+          });
+        };
+      } catch (error) {
+        console.error('[Logger] ✗ Test failed:', error);
+        resolve({
+          success: false,
+          error: error.message
+        });
       }
-    );
-
-    try {
-      const payload = {
-        logs: [testLog],
-        source: 'TizenTube',
-        version: window.h5vcc?.tizentube?.GetVersion() || 'unknown'
-      };
-
-      console.log('[Logger] Test payload:', JSON.stringify(payload, null, 2));
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        this.lastError = `HTTP ${response.status}: ${response.statusText}`;
-        console.error('[Logger] ✗ Test POST returned non-OK:', this.lastError);
-        return { success: false, error: this.lastError };
-      }
-
-      // Try to parse JSON, but not strictly required
-      let result = null;
-      try { result = await response.json(); } catch (_) { result = null; }
-
-      console.log('[Logger] ✓ CONNECTION TEST SUCCESSFUL!', result);
-      this.connectionTested = true;
-      this.lastError = null;
-      // if init hasn't set serverUrl yet, set it for future use
-      this.serverUrl = url;
-      return { success: true, message: 'Connection successful! Check your PC terminal.' };
-    } catch (error) {
-      this.lastError = error.message;
-      console.error('[Logger] ✗ CONNECTION TEST FAILED!', error);
-      console.error('[Logger] Troubleshooting:');
-      console.error('[Logger] 1. Is syslog-server.js running on your PC and listening on the configured port?');
-      console.error('[Logger] 2. Is the IP address correct?', url);
-      console.error('[Logger] 3. Are TV and PC on the same network?');
-      console.error('[Logger] 4. Is Windows Firewall blocking the port?');
-      return { success: false, error: this.lastError || 'Connection failed' };
-    }
+    });
   }
 
-  // Get status for UI
   getStatus() {
     return {
       enabled: this.enabled,
@@ -276,24 +322,19 @@ class SyslogLogger {
       logLevel: this.logLevel,
       queueSize: this.logQueue.length,
       lastError: this.lastError,
-      connectionTested: this.connectionTested
+      connectionTested: this.connectionTested,
+      connected: this.ws && this.ws.readyState === WebSocket.OPEN
     };
   }
 }
 
-// Create global logger instance
-const logger = new SyslogLogger();
-
-// Export for use in other modules
+const logger = new WebSocketLogger();
 export default logger;
 
-// Expose globally for debugging
 if (typeof window !== 'undefined') {
   window.TizenLogger = logger;
-
-  // Add console helper
   console.log('[Logger] ═══════════════════════════════════════');
-  console.log('[Logger] TizenLogger available in console');
+  console.log('[Logger] WebSocket Logger initialized');
   console.log('[Logger] Try: TizenLogger.testConnection()');
   console.log('[Logger] Try: TizenLogger.getStatus()');
   console.log('[Logger] ═══════════════════════════════════════');

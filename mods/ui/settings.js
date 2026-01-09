@@ -800,8 +800,8 @@ export default function modernUI(update, parameters) {
             },
             // Use getter so it evaluates dynamically each time
             get options() {
-                const currentIp = configRead('syslogServerIp') || '192.168.50.98';
-                const currentPort = configRead('syslogServerPort') || 8080;
+                const currentIp = configRead('syslogServerIp') || '192.168.70.124';
+                const currentPort = configRead('syslogServerPort') || 8081;
                 const currentLogLevel = configRead('logLevel') || 'INFO';
                 const loggingEnabled = configRead('enableRemoteLogging') || false;
                 
@@ -856,9 +856,9 @@ export default function modernUI(update, parameters) {
                                 menuId: 'tt-syslog-port',
                                 menuHeader: {
                                     title: 'Syslog Server Port',
-                                    subtitle: `Current: ${currentPort} (default: 8080)`
+                                    subtitle: `Current: ${currentPort} (default: 8081)`
                                 },
-                                options: [514, 8080, 3000, 5000, 9000].map((port) => {
+                                options: [514, 8081, 3000, 5000, 9000].map((port) => {
                                     return {
                                         name: `Port ${port}`,
                                         key: 'syslogServerPort',
