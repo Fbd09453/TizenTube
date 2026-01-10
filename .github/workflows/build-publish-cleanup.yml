@@ -405,10 +405,14 @@ jobs:
           
           # Build URL list (comma-separated)
           URLS=""
-          
+                    
           # npm package URLs
           URLS+="${NPM_BASE}@latest/package.json,"
+          URLS+="${NPM_BASE}@latest/dist/userScript.js,"
+          URLS+="${NPM_BASE}@latest/dist/service.js,"
           URLS+="${NPM_BASE}@*/package.json,"
+          URLS+="${NPM_BASE}@*/dist/userScript.js,"
+          URLS+="${NPM_BASE}@*/dist/service.js,"
           URLS+="${NPM_BASE}/package.json,"
           URLS+="${NPM_BASE}@*,"
           
