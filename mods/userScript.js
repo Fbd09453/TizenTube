@@ -19,7 +19,7 @@
         overflow-y: auto;
         z-index: 999999;
         border: 2px solid #0f0;
-        display: none;
+        display: block;
     `;
     document.body.appendChild(consoleDiv);
 

@@ -167,6 +167,27 @@ function customAction(action, parameters) {
                 showToast('Debug Console', 'Console not available');
             }
             break;
+        case 'FORCE_SHOW_CONSOLE':
+            console.log('========================================');
+            console.log('FORCE SHOW CONSOLE TEST');
+            console.log('========================================');
+            console.log('If you see this, the console is working!');
+            console.log('Time:', new Date().toISOString());
+            console.error('This is an ERROR message');
+            console.warn('This is a WARN message');
+            
+            // Try to find the console div
+            const consoleDiv = document.getElementById('tv-debug-console');
+            if (consoleDiv) {
+                consoleDiv.style.display = 'block';
+                consoleDiv.style.zIndex = '999999';
+                console.log('✓ Console DIV found and forced visible');
+                showToast('Console', 'Console should be visible now');
+            } else {
+                console.error('✗ Console DIV not found!');
+                showToast('Console', 'ERROR: Console DIV not found');
+            }
+            break;
         case 'TEST_SYSLOG_CONNECTION':
             console.log('╔═══════════════════════════════════════════════════════════╗');
             console.log('║          TEST_SYSLOG_CONNECTION TRIGGERED                 ║');

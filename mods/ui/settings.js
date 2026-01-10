@@ -808,21 +808,51 @@ export default function modernUI(update, parameters) {
                 return [
                     {
                         name: 'Show Debug Console',
-                        icon: 'SETTINGS',
+                        icon: 'VISIBILITY',
                         value: null,
                         options: {
                             title: 'Debug Console',
-                            subtitle: 'On-screen console for debugging',
+                            subtitle: 'Toggle on-screen debugging console',
                             content: scrollPaneRenderer([
-                                overlayMessageRenderer('This shows console logs on screen.'),
-                                overlayMessageRenderer('Useful for debugging on TV.'),
+                                overlayMessageRenderer('📺 Debug Console'),
+                                overlayMessageRenderer('Shows console.log messages on your TV screen.'),
+                                overlayMessageRenderer('Useful for debugging when browser console is not accessible.'),
+                                overlayMessageRenderer(''),
+                                overlayMessageRenderer('Click the button below to show/hide the console.'),
                                 buttonItem(
-                                    { title: 'Toggle Console', subtitle: 'Show/Hide console overlay' },
+                                    { title: '👁️ Toggle Console', subtitle: 'Show or hide the debug overlay' },
                                     { icon: 'VISIBILITY' },
                                     [
                                         {
                                             customAction: {
                                                 action: 'TOGGLE_DEBUG_CONSOLE'
+                                            }
+                                        },
+                                        {
+                                            signalAction: {
+                                                signal: 'POPUP_BACK'
+                                            }
+                                        }
+                                    ]
+                                )
+                            ])
+                        }
+                    },
+                    {
+                        name: '🧪 Test Console',
+                        icon: 'SETTINGS',
+                        value: null,
+                        options: {
+                            title: 'Test Console',
+                            subtitle: 'Force show console and test logging',
+                            content: scrollPaneRenderer([
+                                buttonItem(
+                                    { title: 'Force Show Console', subtitle: 'Click to test' },
+                                    { icon: 'VISIBILITY' },
+                                    [
+                                        {
+                                            customAction: {
+                                                action: 'FORCE_SHOW_CONSOLE'
                                             }
                                         }
                                     ]
