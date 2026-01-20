@@ -4,105 +4,6 @@ import { getUserLanguageOptionName } from '../features/moreSubtitles.js';
 import qrcode from 'qrcode-npm';
 
 export default function modernUI(update, parameters) {
-    // ---------- Helpers for syslog nested menus ----------
-    function buildFinalFourthOptions(firstOctet, secondOctet, thirdOctet, rangeStart, rangeEnd) {
-        const buttons = [];
-        for (let v = rangeStart; v <= rangeEnd; v++) {
-            const ip = `${firstOctet}.${secondOctet}.${thirdOctet}.${v}`;
-            buttons.push({
-                name: ip,
-                key: 'syslogServerIp',
-                value: ip
-            });
-        }
-        return buttons;
-    }
-
-    function buildFourthGroupOptions(firstOctet, secondOctet, thirdOctet) {
-        // Split into groups of 10 for easier navigation (0-9, 10-19, etc.)
-        const groups = [];
-        for (let base = 0; base <= 250; base += 10) {
-            const start = base;
-            const end = Math.min(base + 9, 255);
-            groups.push({
-                name: `${start} - ${end}`,
-                value: null,
-                options: buildFinalFourthOptions(firstOctet, secondOctet, thirdOctet, start, end)
-            });
-        }
-        return groups;
-    }
-
-    function buildThirdListOptions(firstOctet, secondOctet, rangeStart, rangeEnd) {
-        // Split into groups of 10 for third octet too (0-9, 10-19, etc.)
-        const thirdList = [];
-        for (let base = rangeStart; base <= rangeEnd; base += 10) {
-            const start = base;
-            const end = Math.min(base + 9, rangeEnd);
-            thirdList.push({
-                name: `${start} - ${end}`,
-                subtitle: `${firstOctet}.${secondOctet}.${start}-${end}.x`,
-                value: null,
-                options: buildThirdDetailOptions(firstOctet, secondOctet, start, end)
-            });
-        }
-        return thirdList;
-    }
-
-    function buildThirdDetailOptions(firstOctet, secondOctet, rangeStart, rangeEnd) {
-        // Individual third octet values
-        const options = [];
-        for (let t = rangeStart; t <= rangeEnd; t++) {
-            options.push({
-                name: `${t}`,
-                subtitle: `${firstOctet}.${secondOctet}.${t}.x`,
-                value: null,
-                options: buildFourthGroupOptions(firstOctet, secondOctet, t)
-            });
-        }
-        return options;
-    }
-
-    function buildThirdRangeOptions(firstOctet, secondOctet) {
-        // Split into major ranges of 64
-        const ranges = [
-            { s: 0, e: 63 },
-            { s: 64, e: 127 },
-            { s: 128, e: 191 },
-            { s: 192, e: 255 }
-        ];
-        return ranges.map(r => ({
-            name: `${r.s} - ${r.e}`,
-            subtitle: `Third octet range for ${firstOctet}.${secondOctet}.x`,
-            value: null,
-            options: buildThirdListOptions(firstOctet, secondOctet, r.s, r.e)
-        }));
-    }
-
-    function buildPrefixOptions() {
-        const candidates = [
-            { first: 192, second: 168 },
-            { first: 10, second: 0 },
-            { first: 172, second: 16 },
-            { first: 172, second: 17 },
-            { first: 172, second: 18 },
-            { first: 169, second: 254 }
-        ];
-
-        return candidates.map(c => ({
-            name: `${c.first}.${c.second}.x.x`,
-            subtitle: `Common network prefix`,
-            value: null,
-            options: buildThirdRangeOptions(c.first, c.second)
-        }));
-    }
-
-    function showModalNotification(title, message) {
-        showModal({ title, subtitle: message }, overlayMessageRenderer(message), 'tt-syslog-notify', false);
-    }
-
-    // ---------- End syslog helpers ----------
-
     const settings = [
         {
             name: 'Support TizenTube',
@@ -503,7 +404,7 @@ export default function modernUI(update, parameters) {
                                 title: 'Watched Videos Threshold',
                                 subtitle: 'Set the percentage threshold for hiding watched videos'
                             },
-                            options: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((percent) => {
+                            options: [0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((percent) => {
                                 return {
                                     name: `${percent}%`,
                                     key: 'hideWatchedVideosThreshold',
@@ -800,11 +701,6 @@ export default function modernUI(update, parameters) {
             },
             // Use getter so it evaluates dynamically each time
             get options() {
-                const currentIp = configRead('syslogServerIp') || '192.168.70.124';
-                const currentPort = configRead('syslogServerPort') || 8081;
-                const currentLogLevel = configRead('logLevel') || 'INFO';
-                const loggingEnabled = configRead('enableRemoteLogging') || false;
-                
                 return [
                     {
                         name: 'Debug Console',
@@ -869,133 +765,6 @@ export default function modernUI(update, parameters) {
                                 )
                             ])
                         }
-                    },
-                    {
-                        name: 'Enable Remote Logging',
-                        icon: 'BROADCAST',
-                        value: 'enableRemoteLogging',
-                        subtitle: loggingEnabled ? `Enabled - ${currentIp}:${currentPort}` : 'Disabled'
-                    },
-                    {
-                        name: 'Configure Syslog Server',
-                        icon: 'SETTINGS',
-                        value: null,
-                        menuId: 'tt-syslog-config',
-                        menuHeader: {
-                            title: 'Syslog Server Configuration',
-                            subtitle: `Current: ${currentIp}:${currentPort}`
-                        },
-                        options: [
-                            {
-                                name: 'Server IP Address (Quick Presets)',
-                                icon: 'LINK',
-                                subtitle: `Current: ${currentIp}`,
-                                value: null,
-                                options: buildPrefixOptions()
-                            },
-                            {
-                                name: 'Server IP Address (Legacy Quick Presets)',
-                                icon: 'LINK',
-                                value: null,
-                                subtitle: `Current: ${currentIp}`,
-                                menuId: 'tt-syslog-presets-legacy',
-                                options: [
-                                    ...Array.from({length: 50}, (_, i) => ({
-                                        name: `192.168.50.${90 + i}`,
-                                        key: 'syslogServerIp',
-                                        value: `192.168.50.${90 + i}`
-                                    })),
-                                    ...Array.from({length: 20}, (_, i) => ({
-                                        name: `192.168.70.${100 + i}`,
-                                        key: 'syslogServerIp',
-                                        value: `192.168.70.${100 + i}`
-                                    }))
-                                ]
-                            },
-                            {
-                                name: 'Server Port',
-                                icon: 'SETTINGS',
-                                value: null,
-                                subtitle: `Current: ${currentPort}`,
-                                menuId: 'tt-syslog-port',
-                                menuHeader: {
-                                    title: 'Syslog Server Port',
-                                    subtitle: `Current: ${currentPort} (default: 8081)`
-                                },
-                                options: [514, 8080, 8081, 3000, 5000, 9000].map((port) => {
-                                    return {
-                                        name: `Port ${port}`,
-                                        key: 'syslogServerPort',
-                                        value: port
-                                    }
-                                })
-                            },
-                            {
-                                name: 'Log Level',
-                                icon: 'SETTINGS',
-                                value: null,
-                                subtitle: `Current: ${currentLogLevel}`,
-                                menuId: 'tt-log-level',
-                                menuHeader: {
-                                    title: 'Log Level',
-                                    subtitle: `Current: ${currentLogLevel}`
-                                },
-                                options: ['DEBUG', 'INFO', 'WARN', 'ERROR'].map((level) => {
-                                    return {
-                                        name: level,
-                                        icon: level === 'DEBUG' ? 'SETTINGS' : level === 'ERROR' ? 'ERROR' : 'INFO',
-                                        key: 'logLevel',
-                                        value: level
-                                    }
-                                })
-                            },
-                            {
-                                name: 'Test Connection',
-                                icon: 'BROADCAST',
-                                value: null,
-                                subtitle: `Test ${currentIp}:${currentPort}`,
-                                options: {
-                                    title: 'Test Syslog Connection',
-                                    subtitle: `Testing ${currentIp}:${currentPort}`,
-                                    content: scrollPaneRenderer([
-                                        overlayMessageRenderer(`📡 KrX Current Configuration:`),
-                                        overlayMessageRenderer(`IP Address: ${currentIp}`),
-                                        overlayMessageRenderer(`Port: ${currentPort}`),
-                                        overlayMessageRenderer(`Log Level: ${currentLogLevel}`),
-                                        overlayMessageRenderer(`Remote Logging: ${loggingEnabled ? '✓ Enabled' : '✗ Disabled'}`),
-                                        overlayMessageRenderer(''),
-                                        overlayMessageRenderer('💡 What this does:'),
-                                        overlayMessageRenderer('Sends a test log to your PC syslog server.'),
-                                        overlayMessageRenderer('Check your PC terminal to see if the log appears.'),
-                                        overlayMessageRenderer(''),
-                                        overlayMessageRenderer('⚠️ Make sure:'),
-                                        overlayMessageRenderer('1. syslog-server.js is running on your PC'),
-                                        overlayMessageRenderer('2. IP address is correct'),
-                                        overlayMessageRenderer('3. Windows Firewall allows port ' + currentPort),
-                                        overlayMessageRenderer('4. TV and PC are on same network'),
-                                        buttonItem(
-                                            { 
-                                                title: '🧪 Send Test Log', 
-                                                subtitle: `To ${currentIp}:${currentPort}` 
-                                            },
-                                            { icon: 'BROADCAST' },
-                                            [
-                                                {
-                                                    customAction: {
-                                                        action: 'TEST_SYSLOG_CONNECTION'
-                                                    }
-                                                },
-                                                {
-                                                    signalAction: {
-                                                        signal: 'POPUP_BACK'
-                                                    }
-                                                }
-                                            ]
-                                        )
-                                    ])
-                                }
-                            }
-                        ]
                     }
                 ];
             }

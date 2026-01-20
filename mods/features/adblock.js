@@ -11,22 +11,23 @@ JSON.parse = function () {
   const adBlockEnabled = configRead('enableAdBlock');
 
   if (r.adPlacements && adBlockEnabled) {
-    logger.debug('ADBLOCK', 'Removing adPlacements', { count: r.adPlacements.length });
+    console.log('ADBLOCK', 'Removing adPlacements', { count: r.adPlacements.length });
+    
     r.adPlacements = [];
   }
 
   if (r.playerAds && adBlockEnabled) {
-    logger.debug('ADBLOCK', 'Disabling playerAds');
+    console.log('ADBLOCK', 'Disabling playerAds');
     r.playerAds = false;
   }
 
   if (r.adSlots && adBlockEnabled) {
-    logger.debug('ADBLOCK', 'Clearing adSlots', { count: r.adSlots.length });
+    console.log('ADBLOCK', 'Clearing adSlots', { count: r.adSlots.length });
     r.adSlots = [];
   }
 
   if (r.paidContentOverlay && !configRead('enablePaidPromotionOverlay')) {
-    logger.debug('ADBLOCK', 'Removing paid content overlay');
+    console.log('ADBLOCK', 'Removing paid content overlay');
     r.paidContentOverlay = null;
   }
 
@@ -74,7 +75,7 @@ JSON.parse = function () {
   }
 
   if (r.endscreen && configRead('enableHideEndScreenCards')) {
-    logger.debug('UI_FILTER', 'Hiding end screen cards');
+    console.log('UI_FILTER', 'Hiding end screen cards');
     r.endscreen = null;
   }
 
@@ -82,7 +83,7 @@ JSON.parse = function () {
     const before = r.messages.length;
     r.messages = r.messages.filter((msg) => !msg?.youThereRenderer);
     if (before !== r.messages.length) {
-      logger.debug('UI_FILTER', 'Removed YouThereRenderer messages', { removed: before - r.messages.length });
+      console.log('UI_FILTER', 'Removed YouThereRenderer messages', { removed: before - r.messages.length });
     }
   }
 
@@ -100,7 +101,7 @@ JSON.parse = function () {
   }
 
   if (r?.contents?.sectionListRenderer?.contents) {
-    logger.debug('SHELF_ENTRY', 'Processing sectionListRenderer.contents', {
+    console.log('SHELF_ENTRY', 'Processing sectionListRenderer.contents', {
       count: r.contents.sectionListRenderer.contents.length,
       page: getCurrentPage()
     });
@@ -108,7 +109,7 @@ JSON.parse = function () {
   }
 
   if (r?.continuationContents?.sectionListContinuation?.contents) {
-    logger.debug('SHELF_ENTRY', 'Processing continuation contents', {
+    console.log('SHELF_ENTRY', 'Processing continuation contents', {
       count: r.continuationContents.sectionListContinuation.contents.length,
       page: getCurrentPage()
     });
@@ -116,7 +117,7 @@ JSON.parse = function () {
   }
 
   if (r?.continuationContents?.horizontalListContinuation?.items) {
-    logger.debug('SHELF_ENTRY', 'Processing horizontal list continuation', {
+    console.log('SHELF_ENTRY', 'Processing horizontal list continuation', {
       count: r.continuationContents.horizontalListContinuation.items.length
     });
     deArrowify(r.continuationContents.horizontalListContinuation.items);
@@ -126,7 +127,7 @@ JSON.parse = function () {
   }
 
   if (r?.contents?.tvBrowseRenderer?.content?.tvSecondaryNavRenderer?.sections) {
-    logger.debug('SHELF_ENTRY', 'Processing tvSecondaryNavRenderer sections');
+    console.log('SHELF_ENTRY', 'Processing tvSecondaryNavRenderer sections');
     for (const section of r.contents.tvBrowseRenderer.content.tvSecondaryNavRenderer.sections) {
       for (const tab of section.tvSecondaryNavSectionRenderer.tabs) {
         processShelves(tab.tabRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents);
@@ -174,7 +175,7 @@ JSON.parse = function () {
         }
       }
       r.playerOverlays.playerOverlayRenderer.timelyActionRenderers = timelyActions;
-      logger.debug('SPONSORBLOCK', `Added ${timelyActions.length} manual skip actions`);
+      console.log('SPONSORBLOCK', `Added ${timelyActions.length} manual skip actions`);
     }
   } else if (r?.playerOverlays?.playerOverlayRenderer) {
     r.playerOverlays.playerOverlayRenderer.timelyActionRenderers = [];
@@ -193,7 +194,7 @@ JSON.parse = function () {
             })
           }
         });
-        logger.debug('SPONSORBLOCK', 'Added highlight button');
+        console.log('SPONSORBLOCK', 'Added highlight button');
       }
     }
   }
@@ -261,7 +262,7 @@ function isShortItem(item) {
                    item.videoRenderer?.videoId || 
                    item.richItemRenderer?.content?.videoRenderer?.videoId || 
                    'unknown';
-    logger.debug('SHORT_DETECTED', `Short video detected: ${videoId}`, {
+    console.log('SHORT_DETECTED', `Short video detected: ${videoId}`, {
       reasons: detectionReasons,
       page: getCurrentPage()
     });
@@ -502,7 +503,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
     totalItemsAfter += itemsAfter;
     
     if (itemsBefore > 0) {
-      logger.debug('SHELF_PROCESSED', `Processed ${shelfType} shelf`, {
+      console.log('SHELF_PROCESSED', `Processed ${shelfType} shelf`, {
         before: itemsBefore,
         after: itemsAfter,
         filtered: itemsBefore - itemsAfter,
@@ -636,7 +637,7 @@ function hideVideo(items) {
   const shouldHideOnThisPage = configPages.length === 0 || configPages.includes(page);
   
   if (!shouldHideOnThisPage) {
-    logger.debug('WATCHED_SKIP', `Skipping watched video hiding on ${page}`, {
+    console.log('WATCHED_SKIP', `Skipping watched video hiding on ${page}`, {
       configPages,
       threshold
     });
@@ -644,7 +645,7 @@ function hideVideo(items) {
   }
   
   if (page === 'playlist' && !configRead('enableHideWatchedInPlaylists')) {
-    logger.debug('WATCHED_SKIP', 'Skipping watched video hiding in playlist (disabled)');
+    console.log('WATCHED_SKIP', 'Skipping watched video hiding in playlist (disabled)');
     return items;
   }
   
@@ -667,7 +668,7 @@ function hideVideo(items) {
                      item.richItemRenderer?.content?.videoRenderer?.videoId || 
                      'unknown';
       
-      logger.debug('WATCHED_HIDDEN', `Hiding watched video ${videoId}`, {
+      console.log('WATCHED_HIDDEN', `Hiding watched video ${videoId}`, {
         percentWatched,
         threshold,
         page

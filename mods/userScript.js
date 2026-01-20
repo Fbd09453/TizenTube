@@ -36,7 +36,6 @@
     const consoleDiv = document.createElement('div');
     consoleDiv.id = 'tv-debug-console';
     
-    // Apply initial position
     const posStyles = positions[currentPosition] || positions['bottom-right'];
     consoleDiv.style.cssText = `
         position: fixed;
@@ -55,7 +54,6 @@
         box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
     `;
     
-    // Set position
     Object.assign(consoleDiv.style, posStyles);
 
     if (document.body) {
@@ -71,30 +69,30 @@
     const originalWarn = console.warn;
 
     let logs = [];
-    let autoScrollEnabled = true;
+    let scrollTimer = null;
 
-    // MutationObserver to auto-scroll whenever content changes
-    const observer = new MutationObserver(() => {
-        if (autoScrollEnabled && consoleDiv) {
-            // Use setTimeout to ensure DOM is fully updated
-            setTimeout(() => {
-                consoleDiv.scrollTop = consoleDiv.scrollHeight;
-            }, 0);
+    // Simple, aggressive auto-scroll function
+    function forceScrollToBottom() {
+        if (!consoleDiv) return;
+        
+        // Cancel any pending scroll
+        if (scrollTimer) {
+            clearTimeout(scrollTimer);
         }
-    });
-
-    // Start observing the console div
-    observer.observe(consoleDiv, {
-        childList: true,
-        subtree: true,
-        characterData: true
-    });
-
-    // Detect manual scroll - disable auto-scroll if user scrolls up
-    consoleDiv.addEventListener('scroll', () => {
-        const isAtBottom = consoleDiv.scrollHeight - consoleDiv.scrollTop <= consoleDiv.clientHeight + 50;
-        autoScrollEnabled = isAtBottom;
-    });
+        
+        // Scroll immediately
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        
+        // And again after a tiny delay (catches late renders)
+        scrollTimer = setTimeout(() => {
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }, 50);
+        
+        // And one more time for good measure
+        setTimeout(() => {
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }, 150);
+    }
 
     function addLog(message, type = 'log') {
         const color = type === 'error' ? '#f00' : type === 'warn' ? '#ff0' : '#0f0';
@@ -106,7 +104,7 @@
 
         if (consoleDiv) {
             consoleDiv.innerHTML = logs.join('');
-            // MutationObserver will handle the scroll
+            forceScrollToBottom();
         }
     }
 
@@ -144,7 +142,6 @@
             Object.assign(config, updates);
             window.localStorage[CONFIG_KEY] = JSON.stringify(config);
             
-            // Trigger config change event manually
             if (window.configChangeEmitter) {
                 Object.keys(updates).forEach(key => {
                     window.configChangeEmitter.dispatchEvent(
@@ -153,11 +150,10 @@
                 });
             }
         } catch (e) {
-            console.error('[Visual Console] Failed to save config:', e);
+            // ignore
         }
     }
 
-    // Global toggle function with IMMEDIATE effect
     window.toggleDebugConsole = function() {
         enabled = !enabled;
         if (consoleDiv) {
@@ -165,14 +161,11 @@
         }
         saveConfig({ enableDebugConsole: enabled });
         
-        // Force a log to show it worked
-        const msg = enabled ? 'Console SHOWN' : 'Console HIDDEN';
         if (enabled) {
-            addLog('[Visual Console] ' + msg, 'log');
+            addLog('[Visual Console] Console SHOWN', 'log');
         }
     };
 
-    // Update position function with IMMEDIATE effect
     window.setDebugConsolePosition = function(pos) {
         currentPosition = pos;
         const posStyles = positions[pos] || positions['bottom-right'];
@@ -182,15 +175,14 @@
         }
         
         saveConfig({ debugConsolePosition: pos });
-        addLog('[Visual Console] Position changed to: ' + pos, 'log');
+        addLog('[Visual Console] Position: ' + pos, 'log');
     };
 
-    // Listen for config changes from settings UI
+    // Monitor config changes
     const checkConfigInterval = setInterval(() => {
         try {
             const config = JSON.parse(window.localStorage[CONFIG_KEY] || '{}');
             
-            // Check if enabled state changed
             const newEnabled = config.enableDebugConsole !== false;
             if (newEnabled !== enabled) {
                 enabled = newEnabled;
@@ -199,7 +191,6 @@
                 }
             }
             
-            // Check if position changed
             const newPosition = config.debugConsolePosition || 'bottom-right';
             if (newPosition !== currentPosition) {
                 currentPosition = newPosition;
@@ -211,12 +202,11 @@
         } catch (e) {
             // ignore
         }
-    }, 500); // Check every 500ms
+    }, 500);
 
-    console.log('[Visual Console] Initialized v3');
+    console.log('[Visual Console] Initialized v4 - Reliable auto-scroll');
     console.log('[Visual Console] Position: ' + currentPosition);
     console.log('[Visual Console] Enabled: ' + enabled);
-    console.log('[Visual Console] Auto-scroll: active');
 })();
 
 import "./utils/debugBridge.js";
@@ -230,7 +220,6 @@ import '@formatjs/intl-displaynames/polyfill.iife'
 import '@formatjs/intl-displaynames/locale-data/en';
 
 import "./domrect-polyfill";
-import "./utils/logger.js";
 import "./features/adblock.js";
 import "./features/sponsorblock.js";
 import "./ui/ui.js";

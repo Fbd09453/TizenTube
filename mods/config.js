@@ -50,10 +50,6 @@ const defaultConfig = {
   launchToOnStartup: null,
   disabledSidebarContents: ['TROPHY', 'NEWS', 'YOUTUBE_MUSIC', 'BROADCAST', 'CLAPPERBOARD', 'LIVE', 'GAMING', 'TAB_MORE'],
   enableUpdater: true,
-  enableRemoteLogging: true,
-  syslogServerIp: '192.168.70.124',
-  syslogServerPort: 8081,             // Port number
-  logLevel: 'DEBUG', // DEBUG, INFO, WARN, ERROR
   enableDebugConsole: false,
   debugConsolePosition: 'bottom-right' // top-left, top-right, bottom-left, bottom-right, center
 };
