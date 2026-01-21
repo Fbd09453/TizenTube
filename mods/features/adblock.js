@@ -736,35 +736,44 @@ function getCurrentPage() {
   const hash = location.hash ? location.hash.substring(1) : '';
   const path = location.pathname || '';
   const search = location.search || '';
-  const combined = (hash + ' ' + path + ' ' + search).toLowerCase();
+  const href = location.href || '';
+  
+  // Clean up the hash - remove additionalDataUrl and other query params
+  const cleanHash = hash.split('?')[0];
+  
+  // Combine for detection
+  const combined = (cleanHash + ' ' + path + ' ' + search + ' ' + href).toLowerCase();
   const fullUrl = `${path}${hash}${search}`;
   
-  // Detect page type
+  // Detect page type - check hash first (most reliable for Tizen YouTube app)
   let detectedPage = 'other';
   
-  if (combined.includes('/playlist') || combined.includes('list=')) {
-    detectedPage = 'playlist';
-  } else if (combined.includes('/feed/subscriptions') || combined.includes('subscriptions') || combined.includes('abos')) {
+  // Check hash for page indicators (Tizen YouTube uses hash-based routing)
+  if (cleanHash.includes('/feed/subscriptions') || cleanHash.includes('subscriptions')) {
     detectedPage = 'subscriptions';
-  } else if (combined.includes('/feed/library') || combined.includes('library') || combined.includes('mediathek')) {
+  } else if (cleanHash.includes('/feed/library') || cleanHash.includes('library')) {
     detectedPage = 'library';
-  } else if (combined.includes('/results') || combined.includes('/search') || combined.includes('suche')) {
+  } else if (cleanHash.includes('/playlist') || cleanHash.includes('list=') || combined.includes('playlist')) {
+    detectedPage = 'playlist';
+  } else if (cleanHash.includes('/results') || cleanHash.includes('/search') || combined.includes('search_query=')) {
     detectedPage = 'search';
-  } else if (combined.includes('/@') || combined.includes('/channel/') || combined.includes('/c/') || combined.includes('/user/')) {
+  } else if (cleanHash.includes('/@') || cleanHash.includes('/channel/') || cleanHash.includes('/c/') || cleanHash.includes('/user/')) {
     detectedPage = 'channel';
   } else if (combined.includes('music')) {
     detectedPage = 'music';
   } else if (combined.includes('gaming')) {
     detectedPage = 'gaming';
-  } else if (combined.includes('more')) {
-    detectedPage = 'more';
-  } else if (combined === '' || combined === '/' || combined.includes('/home') || combined.includes('browse')) {
-    detectedPage = 'home';
-  } else if (combined.includes('/watch')) {
+  } else if (combined.includes('/feed/trending') || cleanHash.includes('trending')) {
+    detectedPage = 'trending';
+  } else if (combined.includes('/feed/history') || cleanHash.includes('history')) {
+    detectedPage = 'history';
+  } else if (cleanHash.includes('/watch')) {
     detectedPage = 'watch';
+  } else if (cleanHash === '' || cleanHash === '/' || cleanHash.includes('/home') || cleanHash.includes('browse') || path === '/tv') {
+    detectedPage = 'home';
   }
   
-  // Log page changes
+  // Log page changes with extensive detail
   if (detectedPage !== lastDetectedPage || fullUrl !== lastFullUrl) {
     console.log('═══════════════════════════════════════════════');
     console.log('[PAGE_CHANGE] Navigation detected');
@@ -773,7 +782,9 @@ function getCurrentPage() {
     console.log('[PAGE_CHANGE] URL Details:');
     console.log('[PAGE_CHANGE]   path:', path);
     console.log('[PAGE_CHANGE]   hash:', hash);
+    console.log('[PAGE_CHANGE]   cleanHash:', cleanHash);
     console.log('[PAGE_CHANGE]   search:', search);
+    console.log('[PAGE_CHANGE]   href:', href);
     console.log('[PAGE_CHANGE]   combined:', combined);
     console.log('[PAGE_CHANGE]   fullUrl:', fullUrl);
     
@@ -788,6 +799,14 @@ function getCurrentPage() {
     console.log('[PAGE_CHANGE]   pageInList:', configPages.includes(detectedPage));
     console.log('[PAGE_CHANGE]   shouldHide:', shouldHideWatched);
     console.log('[PAGE_CHANGE]   threshold:', configRead('hideWatchedVideosThreshold'));
+    
+    // Additional detection info
+    console.log('[PAGE_CHANGE] Detection Logic:');
+    console.log('[PAGE_CHANGE]   Contains "subscriptions":', combined.includes('subscriptions'));
+    console.log('[PAGE_CHANGE]   Contains "library":', combined.includes('library'));
+    console.log('[PAGE_CHANGE]   Contains "playlist":', combined.includes('playlist'));
+    console.log('[PAGE_CHANGE]   Hash starts with "/":', cleanHash.startsWith('/'));
+    
     console.log('═══════════════════════════════════════════════');
     
     lastDetectedPage = detectedPage;

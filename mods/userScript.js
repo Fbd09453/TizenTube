@@ -69,15 +69,19 @@
     const originalWarn = console.warn;
 
     let logs = [];
-    let scrollTimer = null;
 
     function forceScrollToBottom() {
         if (!consoleDiv) return;
-        if (scrollTimer) clearTimeout(scrollTimer);
-        consoleDiv.scrollTop = consoleDiv.scrollHeight;
-        scrollTimer = setTimeout(() => {
+        
+        // Use requestAnimationFrame for reliable scrolling
+        requestAnimationFrame(() => {
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
-        }, 50);
+            
+            // Double-check after another frame
+            requestAnimationFrame(() => {
+                consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            });
+        });
     }
 
     function addLog(message, type = 'log') {
@@ -146,22 +150,69 @@
         } catch (e) {}
     }, 500);
 
-    // USB Detection
+    // USB Detection for Samsung Tizen
     function detectUSB() {
+        console.log('[USB] === USB Detection Started ===');
+        
+        // Method 1: Tizen Filesystem API
         try {
-            if (window.h5vcc && window.h5vcc.storage) {
-                console.log('[USB] Checking for USB storage...');
-                const info = window.h5vcc.storage.getStorageInfo();
-                console.log('[USB] Storage info:', JSON.stringify(info));
+            if (typeof tizen !== 'undefined' && tizen.filesystem) {
+                console.log('[USB] Tizen filesystem API available');
+                tizen.filesystem.listStorages(
+                    function(storages) {
+                        console.log('[USB] Found ' + storages.length + ' storage(s)');
+                        storages.forEach(function(storage, index) {
+                            console.log('[USB] Storage ' + index + ':');
+                            console.log('[USB]   label: ' + storage.label);
+                            console.log('[USB]   type: ' + storage.type);
+                            console.log('[USB]   state: ' + storage.state);
+                        });
+                    },
+                    function(error) {
+                        console.log('[USB] Tizen listStorages error: ' + error.message);
+                    }
+                );
             } else {
-                console.log('[USB] h5vcc.storage not available');
+                console.log('[USB] Tizen filesystem API not available');
             }
         } catch (e) {
-            console.log('[USB] Error detecting USB:', e.message);
+            console.log('[USB] Tizen filesystem error: ' + e.message);
         }
+        
+        // Method 2: webOS h5vcc (for comparison)
+        try {
+            if (window.h5vcc && window.h5vcc.storage) {
+                console.log('[USB] h5vcc.storage available (webOS)');
+                const info = window.h5vcc.storage.getStorageInfo();
+                console.log('[USB] Storage info: ' + JSON.stringify(info));
+            } else {
+                console.log('[USB] h5vcc.storage not available (expected on Tizen)');
+            }
+        } catch (e) {
+            console.log('[USB] h5vcc error: ' + e.message);
+        }
+        
+        // Method 3: Navigator storage (experimental)
+        try {
+            if (navigator.storage && navigator.storage.estimate) {
+                navigator.storage.estimate().then(function(estimate) {
+                    console.log('[USB] Navigator storage estimate:');
+                    console.log('[USB]   quota: ' + (estimate.quota / (1024*1024*1024)).toFixed(2) + ' GB');
+                    console.log('[USB]   usage: ' + (estimate.usage / (1024*1024)).toFixed(2) + ' MB');
+                }).catch(function(err) {
+                    console.log('[USB] Navigator storage error: ' + err.message);
+                });
+            } else {
+                console.log('[USB] Navigator.storage.estimate not available');
+            }
+        } catch (e) {
+            console.log('[USB] Navigator storage error: ' + e.message);
+        }
+        
+        console.log('[USB] === USB Detection Complete ===');
     }
 
-    console.log('[Console] Visual Console v5 - Clean (no syslog/webserver)');
+    console.log('[Console] Visual Console v5');
     console.log('[Console] Position:', currentPosition);
     console.log('[Console] Enabled:', enabled);
     detectUSB();
