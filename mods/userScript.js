@@ -71,37 +71,21 @@
     let logs = [];
     let scrollTimer = null;
 
-    // Simple, aggressive auto-scroll function
     function forceScrollToBottom() {
         if (!consoleDiv) return;
-        
-        // Cancel any pending scroll
-        if (scrollTimer) {
-            clearTimeout(scrollTimer);
-        }
-        
-        // Scroll immediately
+        if (scrollTimer) clearTimeout(scrollTimer);
         consoleDiv.scrollTop = consoleDiv.scrollHeight;
-        
-        // And again after a tiny delay (catches late renders)
         scrollTimer = setTimeout(() => {
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
         }, 50);
-        
-        // And one more time for good measure
-        setTimeout(() => {
-            consoleDiv.scrollTop = consoleDiv.scrollHeight;
-        }, 150);
     }
 
     function addLog(message, type = 'log') {
         const color = type === 'error' ? '#f00' : type === 'warn' ? '#ff0' : '#0f0';
         const timestamp = new Date().toLocaleTimeString();
         const logEntry = `<div style="color:${color};margin-bottom:5px;word-wrap:break-word;white-space:pre-wrap;">[${timestamp}] ${message}</div>`;
-
         logs.push(logEntry);
         if (logs.length > 100) logs.shift();
-
         if (consoleDiv) {
             consoleDiv.innerHTML = logs.join('');
             forceScrollToBottom();
@@ -123,12 +107,10 @@
         addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'warn');
     };
 
-    // Keyboard toggle
     document.addEventListener('keydown', (e) => {
         if (e.key === '`' || e.key === 'F12') {
             enabled = !enabled;
             consoleDiv.style.display = enabled ? 'block' : 'none';
-            saveConfig({ enableDebugConsole: enabled });
         }
         if (e.key === 'c' && enabled) {
             logs = [];
@@ -136,81 +118,55 @@
         }
     });
 
-    function saveConfig(updates) {
-        try {
-            const config = JSON.parse(window.localStorage[CONFIG_KEY] || '{}');
-            Object.assign(config, updates);
-            window.localStorage[CONFIG_KEY] = JSON.stringify(config);
-            
-            if (window.configChangeEmitter) {
-                Object.keys(updates).forEach(key => {
-                    window.configChangeEmitter.dispatchEvent(
-                        new CustomEvent('configChange', { detail: { key, value: updates[key] } })
-                    );
-                });
-            }
-        } catch (e) {
-            // ignore
-        }
-    }
-
     window.toggleDebugConsole = function() {
         enabled = !enabled;
-        if (consoleDiv) {
-            consoleDiv.style.display = enabled ? 'block' : 'none';
-        }
-        saveConfig({ enableDebugConsole: enabled });
-        
-        if (enabled) {
-            addLog('[Visual Console] Console SHOWN', 'log');
-        }
+        if (consoleDiv) consoleDiv.style.display = enabled ? 'block' : 'none';
     };
 
     window.setDebugConsolePosition = function(pos) {
         currentPosition = pos;
         const posStyles = positions[pos] || positions['bottom-right'];
-        
-        if (consoleDiv) {
-            Object.assign(consoleDiv.style, posStyles);
-        }
-        
-        saveConfig({ debugConsolePosition: pos });
-        addLog('[Visual Console] Position: ' + pos, 'log');
+        if (consoleDiv) Object.assign(consoleDiv.style, posStyles);
     };
 
-    // Monitor config changes
     const checkConfigInterval = setInterval(() => {
         try {
             const config = JSON.parse(window.localStorage[CONFIG_KEY] || '{}');
-            
             const newEnabled = config.enableDebugConsole !== false;
             if (newEnabled !== enabled) {
                 enabled = newEnabled;
-                if (consoleDiv) {
-                    consoleDiv.style.display = enabled ? 'block' : 'none';
-                }
+                if (consoleDiv) consoleDiv.style.display = enabled ? 'block' : 'none';
             }
-            
             const newPosition = config.debugConsolePosition || 'bottom-right';
             if (newPosition !== currentPosition) {
                 currentPosition = newPosition;
                 const posStyles = positions[newPosition] || positions['bottom-right'];
-                if (consoleDiv) {
-                    Object.assign(consoleDiv.style, posStyles);
-                }
+                if (consoleDiv) Object.assign(consoleDiv.style, posStyles);
             }
-        } catch (e) {
-            // ignore
-        }
+        } catch (e) {}
     }, 500);
 
-    console.log('[Visual Console] Initialized v4 - Reliable auto-scroll');
-    console.log('[Visual Console] Position: ' + currentPosition);
-    console.log('[Visual Console] Enabled: ' + enabled);
+    // USB Detection
+    function detectUSB() {
+        try {
+            if (window.h5vcc && window.h5vcc.storage) {
+                console.log('[USB] Checking for USB storage...');
+                const info = window.h5vcc.storage.getStorageInfo();
+                console.log('[USB] Storage info:', JSON.stringify(info));
+            } else {
+                console.log('[USB] h5vcc.storage not available');
+            }
+        } catch (e) {
+            console.log('[USB] Error detecting USB:', e.message);
+        }
+    }
+
+    console.log('[Console] Visual Console v5 - Clean (no syslog/webserver)');
+    console.log('[Console] Position:', currentPosition);
+    console.log('[Console] Enabled:', enabled);
+    detectUSB();
 })();
 
-import "./utils/debugBridge.js";
-import "./utils/debugServer.js";
 import "./features/userAgentSpoofing.js";
 import "whatwg-fetch";
 import 'core-js/proposals/object-getownpropertydescriptors';

@@ -3,7 +3,6 @@ import Chapters from '../ui/chapters.js';
 import resolveCommand from '../resolveCommand.js';
 import { timelyAction, longPressData, MenuServiceItemRenderer, ShelfRenderer, TileRenderer, ButtonRenderer } from '../ui/ytUI.js';
 import { PatchSettings } from '../ui/customYTSettings.js';
-import logger from '../utils/logger.js';
 
 const origParse = JSON.parse;
 JSON.parse = function () {
@@ -729,22 +728,71 @@ function findProgressBar(item) {
   return null;
 }
 
+// Track last page to detect changes
+let lastDetectedPage = null;
+let lastFullUrl = null;
+
 function getCurrentPage() {
   const hash = location.hash ? location.hash.substring(1) : '';
   const path = location.pathname || '';
   const search = location.search || '';
   const combined = (hash + ' ' + path + ' ' + search).toLowerCase();
+  const fullUrl = `${path}${hash}${search}`;
   
-  if (combined.includes('/playlist') || combined.includes('list=')) return 'playlist';
-  if (combined.includes('/feed/subscriptions') || combined.includes('subscriptions') || combined.includes('abos')) return 'subscriptions';
-  if (combined.includes('/feed/library') || combined.includes('library') || combined.includes('mediathek')) return 'library';
-  if (combined.includes('/results') || combined.includes('/search') || combined.includes('suche')) return 'search';
-  if (combined.includes('/@') || combined.includes('/channel/') || combined.includes('/c/') || combined.includes('/user/')) return 'channel';
-  if (combined.includes('music')) return 'music';
-  if (combined.includes('gaming')) return 'gaming';
-  if (combined.includes('more')) return 'more';
-  if (combined === '' || combined === '/' || combined.includes('/home') || combined.includes('browse')) return 'home';
-  if (combined.includes('/watch')) return 'watch';
+  // Detect page type
+  let detectedPage = 'other';
   
-  return 'other';
+  if (combined.includes('/playlist') || combined.includes('list=')) {
+    detectedPage = 'playlist';
+  } else if (combined.includes('/feed/subscriptions') || combined.includes('subscriptions') || combined.includes('abos')) {
+    detectedPage = 'subscriptions';
+  } else if (combined.includes('/feed/library') || combined.includes('library') || combined.includes('mediathek')) {
+    detectedPage = 'library';
+  } else if (combined.includes('/results') || combined.includes('/search') || combined.includes('suche')) {
+    detectedPage = 'search';
+  } else if (combined.includes('/@') || combined.includes('/channel/') || combined.includes('/c/') || combined.includes('/user/')) {
+    detectedPage = 'channel';
+  } else if (combined.includes('music')) {
+    detectedPage = 'music';
+  } else if (combined.includes('gaming')) {
+    detectedPage = 'gaming';
+  } else if (combined.includes('more')) {
+    detectedPage = 'more';
+  } else if (combined === '' || combined === '/' || combined.includes('/home') || combined.includes('browse')) {
+    detectedPage = 'home';
+  } else if (combined.includes('/watch')) {
+    detectedPage = 'watch';
+  }
+  
+  // Log page changes
+  if (detectedPage !== lastDetectedPage || fullUrl !== lastFullUrl) {
+    console.log('═══════════════════════════════════════════════');
+    console.log('[PAGE_CHANGE] Navigation detected');
+    console.log('[PAGE_CHANGE] From:', lastDetectedPage || 'initial');
+    console.log('[PAGE_CHANGE] To:', detectedPage);
+    console.log('[PAGE_CHANGE] URL Details:');
+    console.log('[PAGE_CHANGE]   path:', path);
+    console.log('[PAGE_CHANGE]   hash:', hash);
+    console.log('[PAGE_CHANGE]   search:', search);
+    console.log('[PAGE_CHANGE]   combined:', combined);
+    console.log('[PAGE_CHANGE]   fullUrl:', fullUrl);
+    
+    // Check if hide watched is enabled for this page
+    const hideWatchedEnabled = configRead('enableHideWatchedVideos');
+    const configPages = configRead('hideWatchedVideosPages') || [];
+    const shouldHideWatched = hideWatchedEnabled && (configPages.length === 0 || configPages.includes(detectedPage));
+    
+    console.log('[PAGE_CHANGE] Hide Watched Settings:');
+    console.log('[PAGE_CHANGE]   globalEnabled:', hideWatchedEnabled);
+    console.log('[PAGE_CHANGE]   configuredPages:', JSON.stringify(configPages));
+    console.log('[PAGE_CHANGE]   pageInList:', configPages.includes(detectedPage));
+    console.log('[PAGE_CHANGE]   shouldHide:', shouldHideWatched);
+    console.log('[PAGE_CHANGE]   threshold:', configRead('hideWatchedVideosThreshold'));
+    console.log('═══════════════════════════════════════════════');
+    
+    lastDetectedPage = detectedPage;
+    lastFullUrl = fullUrl;
+  }
+  
+  return detectedPage;
 }
