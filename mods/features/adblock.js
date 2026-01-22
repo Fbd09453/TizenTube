@@ -792,23 +792,17 @@ function getCurrentPage() {
   // Log page changes COMPACTLY - ONLY WHEN ACTUALLY CHANGED
   const currentFullUrl = fullUrl;
   if (detectedPage !== lastDetectedPage || currentFullUrl !== lastFullUrl) {
-    console.log(`[PAGE] ${lastDetectedPage||'initial'} → ${detectedPage} | hash:${cleanHash} | C=${browseParam || 'none'}`);
+    console.log(`[PAGE] ${lastDetectedPage||'initial'} → ${detectedPage}`);
+    console.log(`[PAGE] URL: ${location.href}`);
+    console.log(`[PAGE] Hash: "${cleanHash}" | C: "${browseParam || 'none'}"`);
     
     const hideWatchedEnabled = configRead('enableHideWatchedVideos');
     const configPages = configRead('hideWatchedVideosPages') || [];
     const shouldHideWatched = hideWatchedEnabled && (configPages.length === 0 || configPages.includes(detectedPage));
     const threshold = configRead('hideWatchedVideosThreshold');
     
-    console.log(`[PAGE] HideWatched: ${shouldHideWatched ? 'YES' : 'NO'} | Global:${hideWatchedEnabled} | InList:${configPages.includes(detectedPage)} | Threshold:${threshold}%`);
+    console.log(`[PAGE] HideWatched: ${shouldHideWatched ? 'YES' : 'NO'} | Enabled:${hideWatchedEnabled} | InConfigPages:${configPages.includes(detectedPage)} | Threshold:${threshold}%`);
     console.log(`[PAGE] ConfigPages: [${configPages.join(', ')}]`);
-    
-    // Only show detailed detection if page is 'other' (to help debug)
-    if (detectedPage === 'other') {
-      console.log('[PAGE_DEBUG] Detection failed - showing details:');
-      console.log('[PAGE_DEBUG]   browseParam:', browseParam);
-      console.log('[PAGE_DEBUG]   cleanHash:', cleanHash);
-      console.log('[PAGE_DEBUG]   fullHash:', hash);
-    }
     
     lastDetectedPage = detectedPage;
     lastFullUrl = currentFullUrl;

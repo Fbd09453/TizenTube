@@ -51,7 +51,8 @@ const defaultConfig = {
   disabledSidebarContents: ['TROPHY', 'NEWS', 'YOUTUBE_MUSIC', 'BROADCAST', 'CLAPPERBOARD', 'LIVE', 'GAMING', 'TAB_MORE'],
   enableUpdater: true,
   enableDebugConsole: false,
-  debugConsolePosition: 'bottom-right' // top-left, top-right, bottom-left, bottom-right, center
+  debugConsolePosition: 'bottom-right', // top-left, top-right, bottom-left, bottom-right, center
+  enableUSBMonitoring: false
 };
 
 let localConfig;

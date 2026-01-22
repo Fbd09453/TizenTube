@@ -188,5 +188,13 @@ function customAction(action, parameters) {
                 showToast('Console', 'ERROR: Console DIV not found');
             }
             break;
+        case 'CHECK_USB':
+            if (typeof window.checkUSB === 'function') {
+                window.checkUSB();
+                showToast('USB Check', 'Checking for USB drives...');
+            } else {
+                showToast('USB Check', 'USB check not available');
+            }
+            break;
     }
 }

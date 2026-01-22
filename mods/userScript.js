@@ -196,78 +196,58 @@
         } catch (e) {}
     }, 500);
 
-    // USB Detection for Samsung Tizen with Monitoring
+    // USB Detection for Samsung Tizen
     let lastUSBState = null;
+    let usbCheckCount = 0;
+    
+    function getUSBMonitoringEnabled() {
+        try {
+            const config = JSON.parse(window.localStorage[CONFIG_KEY] || '{}');
+            return config.enableUSBMonitoring === true;
+        } catch (e) {
+            return false;
+        }
+    }
     
     function detectUSB() {
-        console.log('[USB] Checking storage...');
+        if (!getUSBMonitoringEnabled()) return;
         
-        // Method 1: Tizen Filesystem API
+        usbCheckCount++;
+        console.log(`[USB] Check #${usbCheckCount} - Scanning drives...`);
+        
+        // Check localStorage for USB paths (same method as config)
         try {
-            if (typeof tizen !== 'undefined' && tizen.filesystem) {
-                tizen.filesystem.listStorages(
-                    function(storages) {
-                        const usbStorages = storages.filter(s => s.type === 'REMOVABLE');
-                        const currentState = JSON.stringify(usbStorages.map(s => ({l: s.label, s: s.state})));
-                        
-                        if (currentState !== lastUSBState) {
-                            console.log(`[USB] ${storages.length} storage(s) detected`);
-                            storages.forEach(function(storage, index) {
-                                console.log(`[USB] ${index}: ${storage.label} | ${storage.type} | ${storage.state}`);
-                            });
-                            
-                            if (usbStorages.length > 0) {
-                                console.log(`[USB] ✓ ${usbStorages.length} USB drive(s) connected`);
-                            } else {
-                                console.log('[USB] No USB drives connected');
-                            }
-                            
-                            lastUSBState = currentState;
-                        }
-                    },
-                    function(error) {
-                        console.log('[USB] Tizen error: ' + error.message);
-                    }
-                );
-            } else {
-                console.log('[USB] Tizen filesystem API not available');
+            const keys = Object.keys(window.localStorage);
+            const usbKeys = keys.filter(k => k.includes('usb') || k.includes('USB') || k.includes('storage'));
+            if (usbKeys.length > 0) {
+                console.log('[USB] localStorage keys:', usbKeys.join(', '));
             }
-        } catch (e) {
-            console.log('[USB] Tizen error: ' + e.message);
-        }
+        } catch (e) {}
         
-        // Method 2: h5vcc (webOS check)
-        try {
-            if (window.h5vcc && window.h5vcc.storage) {
-                const info = window.h5vcc.storage.getStorageInfo();
-                console.log('[USB] h5vcc: ' + JSON.stringify(info));
-            } else {
-                console.log('[USB] h5vcc not available (expected on Tizen)');
-            }
-        } catch (e) {
-            console.log('[USB] h5vcc check failed');
-        }
-        
-        // Method 3: Navigator storage
+        // Try navigator.storage (should work on Tizen)
         try {
             if (navigator.storage && navigator.storage.estimate) {
                 navigator.storage.estimate().then(function(estimate) {
                     const quotaGB = (estimate.quota / (1024*1024*1024)).toFixed(2);
                     const usageMB = (estimate.usage / (1024*1024)).toFixed(2);
-                    console.log(`[USB] Browser storage: ${quotaGB}GB quota, ${usageMB}MB used`);
+                    console.log(`[USB] Storage: ${usageMB}MB used of ${quotaGB}GB`);
                 }).catch(function(err) {
-                    console.log('[USB] Navigator error: ' + err.message);
+                    console.log('[USB] Storage check failed:', err.message);
                 });
-            } else {
-                console.log('[USB] Navigator.storage not available');
             }
-        } catch (e) {
-            console.log('[USB] Navigator check failed');
-        }
+        } catch (e) {}
     }
     
-    // Monitor USB changes every 5 seconds
-    setInterval(detectUSB, 5000);
+    // Manual USB check function
+    window.checkUSB = function() {
+        console.log('[USB] Manual check requested');
+        detectUSB();
+    };
+    
+    // Check on startup
+    setTimeout(detectUSB, 1000);
+    // Check again after 20 seconds
+    setTimeout(detectUSB, 20000);
 
     console.log('[Console] Visual Console v8');
     console.log('[Console] Position:', currentPosition);

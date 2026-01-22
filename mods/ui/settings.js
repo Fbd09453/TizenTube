@@ -758,6 +758,33 @@ export default function modernUI(update, parameters) {
                         ]
                     },
                     {
+                        name: 'USB Drive Monitoring',
+                        icon: 'SYSTEM_UPDATE',
+                        value: 'enableUSBMonitoring'
+                    },
+                    {
+                        name: '🔍 Manual USB Check',
+                        icon: 'SEARCH',
+                        value: null,
+                        options: {
+                            title: 'Manual USB Check',
+                            subtitle: 'Check for connected USB drives now',
+                            content: scrollPaneRenderer([
+                                buttonItem(
+                                    { title: 'Check USB Drives', subtitle: 'Click to scan' },
+                                    { icon: 'SYSTEM_UPDATE' },
+                                    [
+                                        {
+                                            customAction: {
+                                                action: 'CHECK_USB'
+                                            }
+                                        }
+                                    ]
+                                )
+                            ])
+                        }
+                    },
+                    {
                         name: '🧪 Test Console',
                         icon: 'SETTINGS',
                         value: null,
