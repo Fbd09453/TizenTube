@@ -1,9 +1,10 @@
-// Visual Console for TV
+// Visual Console for TV - FIXED VERSION v10
 // This creates an on-screen console you can see on your TV
+// With WORKING auto-scroll and keyboard controls
 
 (function() {
     const CONFIG_KEY = 'ytaf-configuration';
-
+    
     const getConsolePosition = () => {
         try {
             const config = JSON.parse(window.localStorage[CONFIG_KEY] || '{}');
@@ -24,7 +25,7 @@
 
     let currentPosition = getConsolePosition();
     let enabled = getConsoleEnabled();
-    let manualScrollMode = false; // Track if user is manually controlling scroll
+    let autoScroll = true; // Always auto-scroll by default
 
     const positions = {
         'top-left': { top: '0', left: '0', right: '', bottom: '', transform: '' },
@@ -71,58 +72,13 @@
 
     let logs = [];
 
-    // SIMPLIFIED scroll function - use requestAnimationFrame for reliable scrolling
-    function scrollToBottom() {
-        if (!consoleDiv || manualScrollMode) return;
+    // CRITICAL FIX: Simple, reliable scroll function
+    function doAutoScroll() {
+        if (!consoleDiv || !autoScroll || !enabled) return;
         
-        requestAnimationFrame(() => {
-            consoleDiv.scrollTop = consoleDiv.scrollHeight;
-        });
+        // Use the simplest possible approach - just set scrollTop directly
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
     }
-
-    // Remote control support - use color buttons
-    document.addEventListener('keydown', (e) => {
-        // Toggle console visibility
-        if (e.key === '`' || e.key === 'F12') {
-            enabled = !enabled;
-            consoleDiv.style.display = enabled ? 'block' : 'none';
-            if (enabled) scrollToBottom();
-        }
-        
-        // Clear logs
-        if (e.key === 'c' && enabled) {
-            logs = [];
-            consoleDiv.innerHTML = '';
-        }
-
-        // Remote control navigation when console is visible
-        if (enabled) {
-            // Samsung/Tizen remote color buttons
-            // Red (403), Green (404), Yellow (405), Blue (406)
-            // Or use arrow keys as fallback
-            
-            if (e.keyCode === 404 || e.key === 'ArrowDown') { // Green or Down
-                e.preventDefault();
-                manualScrollMode = true;
-                consoleDiv.scrollTop += 50;
-            }
-            else if (e.keyCode === 405 || e.key === 'ArrowUp') { // Yellow or Up
-                e.preventDefault();
-                manualScrollMode = true;
-                consoleDiv.scrollTop -= 50;
-            }
-            else if (e.keyCode === 403) { // Red - scroll to bottom
-                e.preventDefault();
-                manualScrollMode = false;
-                scrollToBottom();
-            }
-            else if (e.keyCode === 406) { // Blue - scroll to top
-                e.preventDefault();
-                manualScrollMode = true;
-                consoleDiv.scrollTop = 0;
-            }
-        }
-    });
 
     console.log = function(...args) {
         originalLog.apply(console, args);
@@ -139,13 +95,93 @@
         addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'warn');
     };
 
+    // Keyboard controls - using NUMBER KEYS and media keys that aren't taken
+    document.addEventListener('keydown', (e) => {
+        // Toggle console visibility with ` or F12
+        if (e.key === '`' || e.key === 'F12') {
+            enabled = !enabled;
+            consoleDiv.style.display = enabled ? 'block' : 'none';
+            if (enabled) {
+                autoScroll = true;
+                doAutoScroll();
+            }
+        }
+        
+        // Clear logs with 'c' when console is visible
+        if (e.key === 'c' && enabled) {
+            logs = [];
+            consoleDiv.innerHTML = '';
+        }
+
+        // Only handle scroll controls when console is visible
+        if (!enabled) return;
+
+        // Number keys for control (available on Samsung remotes)
+        // 1 = Scroll Up, 3 = Scroll Down, 5 = Toggle Auto-scroll, 7 = Top, 9 = Bottom
+        
+        if (e.key === '1') { // Scroll up
+            e.preventDefault();
+            autoScroll = false;
+            consoleDiv.scrollTop -= 100;
+            updateBorder();
+        }
+        else if (e.key === '3') { // Scroll down
+            e.preventDefault();
+            autoScroll = false;
+            consoleDiv.scrollTop += 100;
+            updateBorder();
+        }
+        else if (e.key === '5') { // Toggle auto-scroll
+            e.preventDefault();
+            autoScroll = !autoScroll;
+            updateBorder();
+            if (autoScroll) doAutoScroll();
+            console.log(`[Console] Auto-scroll: ${autoScroll ? 'ON' : 'OFF'}`);
+        }
+        else if (e.key === '7') { // Jump to top
+            e.preventDefault();
+            autoScroll = false;
+            consoleDiv.scrollTop = 0;
+            updateBorder();
+        }
+        else if (e.key === '9') { // Jump to bottom + enable auto-scroll
+            e.preventDefault();
+            autoScroll = true;
+            doAutoScroll();
+            updateBorder();
+        }
+        
+        // Also support arrow keys as fallback (if they're not intercepted by YouTube)
+        else if (e.keyCode === 38 && e.target === document.body) { // Up arrow
+            e.preventDefault();
+            autoScroll = false;
+            consoleDiv.scrollTop -= 50;
+            updateBorder();
+        }
+        else if (e.keyCode === 40 && e.target === document.body) { // Down arrow
+            e.preventDefault();
+            autoScroll = false;
+            consoleDiv.scrollTop += 50;
+            updateBorder();
+        }
+    });
+
+    // Visual indicator of auto-scroll state
+    function updateBorder() {
+        if (consoleDiv) {
+            consoleDiv.style.borderColor = autoScroll ? '#0f0' : '#f80'; // Green = auto, Orange = manual
+        }
+    }
+
     window.toggleDebugConsole = function() {
         enabled = !enabled;
         if (consoleDiv) {
             consoleDiv.style.display = enabled ? 'block' : 'none';
             if (enabled) {
-                manualScrollMode = false;
-                scrollToBottom();
+                autoScroll = true;
+                updateBorder();
+                // Wait a tick for display:block to apply
+                setTimeout(doAutoScroll, 10);
             }
         }
     };
@@ -156,6 +192,7 @@
         if (consoleDiv) Object.assign(consoleDiv.style, posStyles);
     };
 
+    // Watch for config changes
     const checkConfigInterval = setInterval(() => {
         try {
             const config = JSON.parse(window.localStorage[CONFIG_KEY] || '{}');
@@ -165,8 +202,9 @@
                 if (consoleDiv) {
                     consoleDiv.style.display = enabled ? 'block' : 'none';
                     if (enabled) {
-                        manualScrollMode = false;
-                        scrollToBottom();
+                        autoScroll = true;
+                        updateBorder();
+                        setTimeout(doAutoScroll, 10);
                     }
                 }
             }
@@ -187,14 +225,17 @@
         logs.push(logEntry);
         if (logs.length > 150) logs.shift();
         
-        if (consoleDiv) {
+        if (consoleDiv && enabled) {
             consoleDiv.innerHTML = logs.join('');
-            scrollToBottom();
+            // CRITICAL: Always try to scroll after updating content
+            if (autoScroll) {
+                // Use setTimeout to ensure DOM has updated
+                setTimeout(doAutoScroll, 0);
+            }
         }
     }
 
-    // USB Detection for Samsung Tizen - ENHANCED VERSION
-    let lastUSBState = null;
+    // ========== USB Detection for Samsung Tizen - ENHANCED ==========
     let usbCheckCount = 0;
     
     function getUSBMonitoringEnabled() {
@@ -210,85 +251,114 @@
         if (!getUSBMonitoringEnabled()) return;
         
         usbCheckCount++;
+        console.log(`[USB] ========================================`);
         console.log(`[USB] Check #${usbCheckCount} - Scanning drives...`);
+        console.log(`[USB] ========================================`);
         
         // Try Tizen filesystem API if available
         if (window.tizen && window.tizen.filesystem) {
             try {
-                console.log('[USB] Tizen filesystem API available');
+                console.log('[USB] ✓ Tizen filesystem API available');
                 
                 // List all storages
                 const storages = window.tizen.filesystem.listStorages();
-                console.log(`[USB] Found ${storages.length} storage(s)`);
+                console.log(`[USB] Found ${storages.length} storage device(s)`);
+                console.log('[USB] ----------------------------------------');
                 
                 storages.forEach((storage, idx) => {
-                    console.log(`[USB] Storage ${idx}: ${storage.label} (${storage.type}) - ${storage.state}`);
+                    const icon = storage.type === 'EXTERNAL' ? '📁' : '💾';
+                    console.log(`[USB] ${icon} Storage ${idx + 1}:`);
+                    console.log(`[USB]   Label: ${storage.label}`);
+                    console.log(`[USB]   Type: ${storage.type}`);
+                    console.log(`[USB]   State: ${storage.state}`);
                     
-                    // Try to resolve the storage to get its path
+                    // Try to resolve and list contents
                     try {
                         window.tizen.filesystem.resolve(
                             storage.label,
                             function(dir) {
-                                console.log(`[USB] Resolved ${storage.label}:`);
-                                console.log(`[USB]   Path: ${dir.fullPath}`);
+                                console.log(`[USB]   ✓ Resolved path: ${dir.fullPath}`);
                                 
-                                // List contents
+                                // List directory contents
                                 dir.listFiles(
                                     function(files) {
-                                        console.log(`[USB]   Contains ${files.length} items:`);
-                                        files.slice(0, 10).forEach(file => {
-                                            const type = file.isDirectory ? 'DIR' : 'FILE';
-                                            const size = file.isFile ? ` (${(file.fileSize / 1024).toFixed(1)}KB)` : '';
-                                            console.log(`[USB]     ${type}: ${file.name}${size}`);
-                                        });
-                                        if (files.length > 10) {
-                                            console.log(`[USB]     ... and ${files.length - 10} more`);
+                                        console.log(`[USB]   📂 Contents (${files.length} items):`);
+                                        
+                                        // Separate folders and files
+                                        const folders = files.filter(f => f.isDirectory);
+                                        const regularFiles = files.filter(f => f.isFile);
+                                        
+                                        // List folders first
+                                        if (folders.length > 0) {
+                                            console.log(`[USB]   📁 Folders (${folders.length}):`);
+                                            folders.slice(0, 10).forEach(folder => {
+                                                console.log(`[USB]     📁 ${folder.name}/`);
+                                            });
+                                            if (folders.length > 10) {
+                                                console.log(`[USB]     ... and ${folders.length - 10} more folders`);
+                                            }
+                                        }
+                                        
+                                        // Then list files
+                                        if (regularFiles.length > 0) {
+                                            console.log(`[USB]   📄 Files (${regularFiles.length}):`);
+                                            regularFiles.slice(0, 10).forEach(file => {
+                                                const sizeKB = (file.fileSize / 1024).toFixed(1);
+                                                const sizeMB = file.fileSize > 1024 * 1024 ? 
+                                                    ` (${(file.fileSize / (1024 * 1024)).toFixed(1)}MB)` : '';
+                                                console.log(`[USB]     📄 ${file.name} - ${sizeKB}KB${sizeMB}`);
+                                            });
+                                            if (regularFiles.length > 10) {
+                                                console.log(`[USB]     ... and ${regularFiles.length - 10} more files`);
+                                            }
+                                        }
+                                        
+                                        if (files.length === 0) {
+                                            console.log(`[USB]   (empty directory)`);
                                         }
                                     },
                                     function(err) {
-                                        console.log(`[USB]   Error listing files: ${err.message}`);
+                                        console.log(`[USB]   ✗ Error listing files: ${err.message}`);
                                     }
                                 );
                             },
                             function(err) {
-                                console.log(`[USB] Error resolving ${storage.label}: ${err.message}`);
+                                console.log(`[USB]   ✗ Error resolving: ${err.message}`);
                             }
                         );
                     } catch (e) {
-                        console.log(`[USB] Exception resolving ${storage.label}: ${e.message}`);
+                        console.log(`[USB]   ✗ Exception: ${e.message}`);
                     }
+                    console.log('[USB] ----------------------------------------');
                 });
             } catch (e) {
-                console.log('[USB] Tizen filesystem error:', e.message);
+                console.log('[USB] ✗ Tizen filesystem error:', e.message);
             }
         } else {
-            console.log('[USB] Tizen filesystem API not available');
+            console.log('[USB] ✗ Tizen filesystem API not available');
         }
         
-        // Try reading from known USB paths
-        const commonUSBPaths = [
-            'usb0', 'usb1', 'usb2',
-            'sdcard', 'external',
-            'removable'
-        ];
+        // Try common USB mount paths
+        const commonPaths = ['usb0', 'usb1', 'usb2', 'sdcard', 'external', 'removable'];
+        console.log('[USB] Checking common mount paths...');
         
-        commonUSBPaths.forEach(path => {
+        commonPaths.forEach(path => {
             if (window.tizen && window.tizen.filesystem) {
                 try {
                     window.tizen.filesystem.resolve(
                         path,
                         function(dir) {
-                            console.log(`[USB] Found path: ${path} -> ${dir.fullPath}`);
+                            console.log(`[USB] ✓ Found: ${path} -> ${dir.fullPath}`);
                         },
                         function(err) {
-                            // Silently fail - path doesn't exist
+                            // Silently skip non-existent paths
                         }
                     );
                 } catch (e) {}
             }
         });
         
-        // Check localStorage for USB-related keys
+        // Check localStorage for USB-related entries
         try {
             const keys = Object.keys(window.localStorage);
             const usbKeys = keys.filter(k => 
@@ -297,46 +367,54 @@
                 k.toLowerCase().includes('external')
             );
             if (usbKeys.length > 0) {
-                console.log('[USB] localStorage keys:', usbKeys.join(', '));
+                console.log('[USB] localStorage keys found:', usbKeys.join(', '));
             }
         } catch (e) {}
         
-        // Try navigator.storage
+        // Try navigator.storage API
         try {
             if (navigator.storage && navigator.storage.estimate) {
                 navigator.storage.estimate().then(function(estimate) {
                     const quotaGB = (estimate.quota / (1024*1024*1024)).toFixed(2);
                     const usageMB = (estimate.usage / (1024*1024)).toFixed(2);
-                    console.log(`[USB] Storage: ${usageMB}MB used of ${quotaGB}GB`);
+                    console.log(`[USB] Browser storage: ${usageMB}MB used of ${quotaGB}GB quota`);
                 }).catch(function(err) {
-                    console.log('[USB] Storage check failed:', err.message);
+                    console.log('[USB] Storage estimate failed:', err.message);
                 });
             }
         } catch (e) {}
+        
+        console.log(`[USB] ========================================`);
     }
     
     // Manual USB check function
     window.checkUSB = function() {
-        console.log('[USB] ========================================');
-        console.log('[USB] Manual check requested');
-        console.log('[USB] ========================================');
+        console.log('[USB] 🔍 MANUAL CHECK REQUESTED');
         detectUSB();
     };
     
-    // Check on startup
-    setTimeout(detectUSB, 1000);
-    setTimeout(detectUSB, 5000);  // Check again after 5 seconds
-    setTimeout(detectUSB, 20000); // And after 20 seconds
+    // Automatic checks on startup
+    setTimeout(detectUSB, 1000);   // 1 second
+    setTimeout(detectUSB, 5000);   // 5 seconds
+    setTimeout(detectUSB, 20000);  // 20 seconds
 
-    console.log('[Console] Visual Console v93 - FIXED SCROLLING');
-    console.log('[Console] Remote Controls:');
-    console.log('[Console]   RED button - Auto-scroll to bottom');
-    console.log('[Console]   GREEN/Down - Scroll down');
-    console.log('[Console]   YELLOW/Up - Scroll up');
-    console.log('[Console]   BLUE button - Jump to top');
+    console.log('[Console] ========================================');
+    console.log('[Console] Visual Console 94 - FIXED');
+    console.log('[Console] ========================================');
+    console.log('[Console] Controls:');
+    console.log('[Console]   [1] key - Scroll UP');
+    console.log('[Console]   [3] key - Scroll DOWN');
+    console.log('[Console]   [5] key - Toggle AUTO-SCROLL');
+    console.log('[Console]   [7] key - Jump to TOP');
+    console.log('[Console]   [9] key - Jump to BOTTOM');
+    console.log('[Console]   [c] key - Clear console');
+    console.log('[Console]   Border: GREEN=auto-scroll, ORANGE=manual');
     console.log('[Console] Position:', currentPosition);
     console.log('[Console] Enabled:', enabled);
-    detectUSB();
+    console.log('[Console] ========================================');
+    
+    updateBorder();
+    if (enabled) detectUSB();
 })();
 
 import "./features/userAgentSpoofing.js";
