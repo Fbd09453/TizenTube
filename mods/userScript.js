@@ -95,21 +95,6 @@
         }
     }
 
-    function addLog(message, type = 'log') {
-        const color = type === 'error' ? '#f00' : type === 'warn' ? '#ff0' : '#0f0';
-        const timestamp = new Date().toLocaleTimeString();
-        const logEntry = `<div style="color:${color};margin-bottom:5px;word-wrap:break-word;white-space:pre-wrap;">[${timestamp}] ${message}</div>`;
-        logs.push(logEntry);
-        if (logs.length > 150) logs.shift(); // Increased buffer
-        if (consoleDiv) {
-            consoleDiv.innerHTML = logs.join('');
-            // Force scroll after content is added
-            setTimeout(forceScrollToBottom, 0);
-            setTimeout(forceScrollToBottom, 50);
-            setTimeout(forceScrollToBottom, 100);
-        }
-    }
-
     console.log = function(...args) {
         originalLog.apply(console, args);
         addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'log');
@@ -195,6 +180,25 @@
             }
         } catch (e) {}
     }, 500);
+
+    function addLog(message, type = 'log') {
+        const color = type === 'error' ? '#f00' : type === 'warn' ? '#ff0' : '#0f0';
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = `<div style="color:${color};margin-bottom:5px;word-wrap:break-word;white-space:pre-wrap;">[${timestamp}] ${message}</div>`;
+        logs.push(logEntry);
+        if (logs.length > 150) logs.shift();
+        if (consoleDiv) {
+            // Force re-render by toggling display
+            const wasVisible = consoleDiv.style.display !== 'none';
+            consoleDiv.innerHTML = logs.join('');
+            if (wasVisible && !isUserScrolling) {
+                consoleDiv.style.display = 'none';
+                consoleDiv.offsetHeight; // Force reflow
+                consoleDiv.style.display = 'block';
+                consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            }
+        }
+    }
 
     // USB Detection for Samsung Tizen
     let lastUSBState = null;
