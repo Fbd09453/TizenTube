@@ -184,13 +184,13 @@ function execute_once_dom_loaded() {
         }
         return false;
     }
-    else if (evt.keyCode === 406 || evt.keyCode === 191) { // BLUE = Jump to TOP
-        console.log('[Console] BLUE pressed - Jump to TOP');
+    else if (evt.keyCode === 406 || evt.keyCode === 191) { // BLUE = Toggle Console
+        console.log('[Console] BLUE pressed - Toggling console');
         evt.preventDefault();
         evt.stopPropagation();
         evt.stopImmediatePropagation();
-        if (evt.type === 'keydown' && typeof window.scrollConsoleToTop === 'function') {
-            window.scrollConsoleToTop();
+        if (evt.type === 'keydown' && typeof window.toggleDebugConsole === 'function') {
+            window.toggleDebugConsole();
         }
         return false;
     }

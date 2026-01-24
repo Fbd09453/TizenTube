@@ -322,14 +322,14 @@
     setTimeout(detectUSB, 20000);
 
     console.log('[Console] ========================================');
-    console.log('[Console] Visual Console v105 - NEWEST FIRST');
+    console.log('[Console] Visual Console v110 - NEWEST FIRST');
     console.log('[Console] ========================================');
     console.log('[Console] ⚡ NEWEST LOGS AT TOP (scroll down for older)');
     console.log('[Console] Remote Controls:');
     console.log('[Console]   RED button - Scroll UP (older logs)');
     console.log('[Console]   GREEN button - Scroll DOWN (newer logs)');
     console.log('[Console]   YELLOW button - Jump to TOP (newest)');
-    console.log('[Console]   BLUE button - Jump to BOTTOM (oldest)');
+    console.log('[Console]   BLUE button - Toggle console ON/OFF');
     console.log('[Console]   ');
     console.log('[Console]   Border colors:');
     console.log('[Console]     GREEN = Showing newest logs');
