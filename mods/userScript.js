@@ -2,7 +2,7 @@
 // This creates an on-screen console you can see on your TV
 // With WORKING auto-scroll and keyboard controls
 
-
+// Visual Console for TV - v100 NEWEST FIRST
 (function() {
     const CONFIG_KEY = 'ytaf-configuration';
     
@@ -48,12 +48,14 @@
         font-family: monospace;
         font-size: 13px;
         padding: 10px;
-        overflow-y: auto;
+        overflow-y: scroll;
         overflow-x: hidden;
         z-index: 999999;
         border: 3px solid #0f0;
         display: ${enabled ? 'block' : 'none'};
         box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+        pointer-events: auto;
+        -webkit-overflow-scrolling: touch;
     `;
     
     Object.assign(consoleDiv.style, posStyles);
@@ -71,41 +73,51 @@
     const originalWarn = console.warn;
 
     let logs = [];
-    
-    // EXPOSE to window for ui.js to control
     window.consoleAutoScroll = true;
 
-    // Simple, reliable scroll function
+    // Scroll functions - NOTE: newest logs are at TOP now
     window.scrollConsoleToBottom = function() {
-        if (!consoleDiv || !window.consoleAutoScroll || !enabled) return;
+        if (!consoleDiv || !enabled) {
+            console.log('[Scroll] Cannot scroll:', { div: !!consoleDiv, enabled });
+            return;
+        }
+        const oldScroll = consoleDiv.scrollTop;
         consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        console.log('[Scroll] To bottom (oldest):', oldScroll, '→', consoleDiv.scrollTop);
     };
 
     window.scrollConsoleUp = function() {
         if (!consoleDiv) return;
+        const oldScroll = consoleDiv.scrollTop;
         window.consoleAutoScroll = false;
-        consoleDiv.scrollTop -= 100;
+        consoleDiv.scrollTop = Math.max(0, consoleDiv.scrollTop - 100);
+        console.log('[Scroll] UP (older):', oldScroll, '→', consoleDiv.scrollTop);
         updateBorder();
     };
 
     window.scrollConsoleDown = function() {
         if (!consoleDiv) return;
+        const oldScroll = consoleDiv.scrollTop;
         window.consoleAutoScroll = false;
-        consoleDiv.scrollTop += 100;
+        consoleDiv.scrollTop = Math.min(consoleDiv.scrollHeight, consoleDiv.scrollTop + 100);
+        console.log('[Scroll] DOWN (newer):', oldScroll, '→', consoleDiv.scrollTop);
         updateBorder();
     };
 
     window.scrollConsoleToTop = function() {
         if (!consoleDiv) return;
-        window.consoleAutoScroll = false;
+        const oldScroll = consoleDiv.scrollTop;
+        window.consoleAutoScroll = true;
         consoleDiv.scrollTop = 0;
+        console.log('[Scroll] To top (newest):', oldScroll, '→', consoleDiv.scrollTop);
         updateBorder();
     };
 
     window.enableConsoleAutoScroll = function() {
         window.consoleAutoScroll = true;
+        console.log('[Scroll] Jumped to newest logs (top)');
         updateBorder();
-        window.scrollConsoleToBottom();
+        consoleDiv.scrollTop = 0;
     };
 
     function updateBorder() {
@@ -136,7 +148,7 @@
             if (enabled) {
                 window.consoleAutoScroll = true;
                 updateBorder();
-                setTimeout(window.scrollConsoleToBottom, 10);
+                consoleDiv.scrollTop = 0;
             }
         }
     };
@@ -158,7 +170,7 @@
                     if (enabled) {
                         window.consoleAutoScroll = true;
                         updateBorder();
-                        setTimeout(window.scrollConsoleToBottom, 10);
+                        consoleDiv.scrollTop = 0;
                     }
                 }
             }
@@ -176,23 +188,18 @@
         const timestamp = new Date().toLocaleTimeString();
         const logEntry = `<div style="color:${color};margin-bottom:5px;word-wrap:break-word;white-space:pre-wrap;">[${timestamp}] ${message}</div>`;
         
-        logs.push(logEntry);
-        if (logs.length > 150) logs.shift();
+        logs.unshift(logEntry); // Add to BEGINNING (newest first)
+        if (logs.length > 150) logs.pop();
         
         if (consoleDiv && enabled) {
             consoleDiv.innerHTML = logs.join('');
-            // CRITICAL: Auto-scroll after DOM update
             if (window.consoleAutoScroll) {
-                setTimeout(window.scrollConsoleToBottom, 0);
+                consoleDiv.scrollTop = 0; // Keep at top for newest
             }
         }
     }
 
-    // ========================================================================
-    // USB Detection for Samsung Tizen - ENHANCED
-    // ========================================================================
-    
-    let usbCheckCount = 0;
+    // USB Detection code stays the same...
     
     function getUSBMonitoringEnabled() {
         try {
@@ -290,6 +297,7 @@
         console.log(`[USB] ========================================`);
     }
     
+    let usbCheckCount = 0;
     window.checkUSB = function() {
         console.log('[USB] 🔍 MANUAL CHECK REQUESTED');
         detectUSB();
@@ -300,16 +308,17 @@
     setTimeout(detectUSB, 20000);
 
     console.log('[Console] ========================================');
-    console.log('[Console] Visual Console v99 - FINAL');
+    console.log('[Console] Visual Console v100 - NEWEST FIRST');
     console.log('[Console] ========================================');
+    console.log('[Console] ⚡ NEWEST LOGS AT TOP (scroll down for older)');
     console.log('[Console] Remote Controls:');
-    console.log('[Console]   RED button - Scroll UP');
-    console.log('[Console]   GREEN button - Scroll DOWN');
-    console.log('[Console]   YELLOW button - Auto-scroll ON (jump to bottom)');
-    console.log('[Console]   BLUE button - Jump to TOP');
+    console.log('[Console]   RED button - Scroll UP (older logs)');
+    console.log('[Console]   GREEN button - Scroll DOWN (newer logs)');
+    console.log('[Console]   YELLOW button - Jump to TOP (newest)');
+    console.log('[Console]   BLUE button - Jump to BOTTOM (oldest)');
     console.log('[Console]   ');
     console.log('[Console]   Border colors:');
-    console.log('[Console]     GREEN = Auto-scroll ON');
+    console.log('[Console]     GREEN = Showing newest logs');
     console.log('[Console]     ORANGE = Manual scroll mode');
     console.log('[Console] Position:', currentPosition);
     console.log('[Console] Enabled:', enabled);

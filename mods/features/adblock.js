@@ -770,7 +770,7 @@ function getCurrentPage() {
     detectedPage = 'home';
   }
   // Check traditional hash patterns (fallback)
-  else if (cleanHash.includes('/feed/subscriptions') || cleanHash.includes('/subscriptions') || cleanHash.includes('abos')) {
+  else if (cleanHash.includes('/feed/subscriptions') || cleanHash.includes('/subscriptions') || cleanHash.includes('/abos')) {
     detectedPage = 'subscriptions';
   } else if (cleanHash.includes('/feed/library') || cleanHash.includes('/library')) {
     detectedPage = 'library';

@@ -151,46 +151,48 @@ function execute_once_dom_loaded() {
     }
     
     // ========================================================================
-    // CONSOLE SCROLL CONTROLS - Color buttons only
+    // CONSOLE SCROLL CONTROLS - Color buttons only - CAPTURE PHASE
     // ========================================================================
     
-    if (evt.type === 'keydown') {
-        if (evt.keyCode === 403) { // RED = Scroll UP
-            console.log('[Console] RED - Scrolling UP');
-            evt.preventDefault();
-            evt.stopPropagation();
-            if (typeof window.scrollConsoleUp === 'function') {
-                window.scrollConsoleUp();
-            }
-            return false;
+    if (evt.keyCode === 403 || evt.keyCode === 115) { // RED = Scroll UP
+        console.log('[Console] RED pressed - Scrolling UP');
+        evt.preventDefault();
+        evt.stopPropagation();
+        evt.stopImmediatePropagation();
+        if (evt.type === 'keydown' && typeof window.scrollConsoleUp === 'function') {
+            window.scrollConsoleUp();
         }
-        else if (evt.keyCode === 404 || evt.keyCode === 172) { // GREEN = Scroll DOWN
-            console.log('[Console] GREEN - Scrolling DOWN');
-            evt.preventDefault();
-            evt.stopPropagation();
-            if (typeof window.scrollConsoleDown === 'function') {
-                window.scrollConsoleDown();
-            }
-            return false;
+        return false;
+    }
+    else if (evt.keyCode === 404 || evt.keyCode === 172) { // GREEN = Scroll DOWN
+        console.log('[Console] GREEN pressed - Scrolling DOWN');
+        evt.preventDefault();
+        evt.stopPropagation();
+        evt.stopImmediatePropagation();
+        if (evt.type === 'keydown' && typeof window.scrollConsoleDown === 'function') {
+            window.scrollConsoleDown();
         }
-        else if (evt.keyCode === 405 || evt.keyCode === 170) { // YELLOW = Auto-scroll ON (jump to bottom)
-            console.log('[Console] YELLOW - Auto-scroll ON');
-            evt.preventDefault();
-            evt.stopPropagation();
-            if (typeof window.enableConsoleAutoScroll === 'function') {
-                window.enableConsoleAutoScroll();
-            }
-            return false;
+        return false;
+    }
+    else if (evt.keyCode === 405 || evt.keyCode === 170) { // YELLOW = Auto-scroll ON
+        console.log('[Console] YELLOW pressed - Auto-scroll ON');
+        evt.preventDefault();
+        evt.stopPropagation();
+        evt.stopImmediatePropagation();
+        if (evt.type === 'keydown' && typeof window.enableConsoleAutoScroll === 'function') {
+            window.enableConsoleAutoScroll();
         }
-        else if (evt.keyCode === 406 || evt.keyCode === 191) { // BLUE = Jump to TOP
-            console.log('[Console] BLUE - Jump to TOP');
-            evt.preventDefault();
-            evt.stopPropagation();
-            if (typeof window.scrollConsoleToTop === 'function') {
-                window.scrollConsoleToTop();
-            }
-            return false;
+        return false;
+    }
+    else if (evt.keyCode === 406 || evt.keyCode === 191) { // BLUE = Jump to TOP
+        console.log('[Console] BLUE pressed - Jump to TOP');
+        evt.preventDefault();
+        evt.stopPropagation();
+        evt.stopImmediatePropagation();
+        if (evt.type === 'keydown' && typeof window.scrollConsoleToTop === 'function') {
+            window.scrollConsoleToTop();
         }
+        return false;
     }
     
     // Right arrow - PiP handling (keep this)
