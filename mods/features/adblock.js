@@ -48,6 +48,9 @@ JSON.parse = function () {
 
   // Drop "masthead" ad from home screen
   if (r?.contents?.tvBrowseRenderer?.content?.tvSurfaceContentRenderer?.content?.sectionListRenderer?.contents) {
+    const currentPage = getCurrentPage();
+    console.log('[JSON.parse] tvBrowseRenderer detected, page:', currentPage);
+    
     if (adBlockEnabled) {
       const beforeAds = r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.length;
       r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents =
@@ -70,7 +73,13 @@ JSON.parse = function () {
       }
     }
 
-    processShelves(r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents);
+    // ONLY process if we haven't already processed this response
+    if (!r.__tizentubeProcessed) {
+      r.__tizentubeProcessed = true;
+      processShelves(r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents);
+    } else {
+      console.log('[JSON.parse] Already processed, skipping duplicate');
+    }
   }
 
   if (r.endscreen && configRead('enableHideEndScreenCards')) {
@@ -100,11 +109,16 @@ JSON.parse = function () {
   }
 
   if (r?.contents?.sectionListRenderer?.contents) {
-    console.log('SHELF_ENTRY', 'Processing sectionListRenderer.contents', {
-      count: r.contents.sectionListRenderer.contents.length,
-      page: getCurrentPage()
-    });
-    processShelves(r.contents.sectionListRenderer.contents);
+    if (!r.__tizentubeProcessed) {
+      r.__tizentubeProcessed = true;
+      console.log('SHELF_ENTRY', 'Processing sectionListRenderer.contents', {
+        count: r.contents.sectionListRenderer.contents.length,
+        page: getCurrentPage()
+      });
+      processShelves(r.contents.sectionListRenderer.contents);
+    } else {
+      console.log('[JSON.parse] sectionListRenderer already processed, skipping');
+    }
   }
 
   if (r?.continuationContents?.sectionListContinuation?.contents) {
@@ -748,6 +762,13 @@ function getCurrentPage() {
     browseParam = cMatch[1].toLowerCase(); // Store lowercase for comparison
   }
   
+  // Also check for path-based browse IDs in the hash
+  const browseIdMatch = hash.match(/\/browse\/([^?&#]+)/i);
+  if (browseIdMatch) {
+    const browseId = browseIdMatch[1].toLowerCase();
+    if (!browseParam) browseParam = browseId;
+  }
+  
   // Combine for detection
   const combined = (cleanHash + ' ' + path + ' ' + search + ' ' + href + ' ' + browseParam).toLowerCase();
   const fullUrl = `${path}${hash.split('?additionalDataUrl')[0]}`;
@@ -756,7 +777,7 @@ function getCurrentPage() {
   let detectedPage = 'other';
   
   // CRITICAL: Check browse parameters first (most reliable for Tizen)
-  if (browseParam.includes('fesubscription')) {
+  if (browseParam.includes('fesubscription') || browseParam.includes('subscriptions')) {
     detectedPage = 'subscriptions';
   } else if (browseParam.includes('felibrary')) {
     detectedPage = 'library';

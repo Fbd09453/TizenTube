@@ -65,18 +65,25 @@ try {
 }
 
 export function configRead(key) {
+  // Ignore null/undefined keys silently (they're used for menu structure)
+  if (key === null || key === undefined) {
+    return null;
+  }
+  
   if (localConfig[key] === undefined || localConfig[key] === null) {
     if (defaultConfig[key] !== undefined) {
       console.log('[CONFIG] Setting default for key:', key, '=', defaultConfig[key]);
       localConfig[key] = defaultConfig[key];
-      // Save the default to localStorage
       try {
         window.localStorage[CONFIG_KEY] = JSON.stringify(localConfig);
       } catch (e) {
         console.error('[CONFIG] Failed to save default:', e);
       }
     } else {
-      console.warn('[CONFIG] No default value for key:', key);
+      // Only warn for real config keys, not menu structure keys
+      if (typeof key === 'string' && !key.startsWith('tt-')) {
+        console.warn('[CONFIG] No default value for key:', key);
+      }
       return undefined;
     }
   }

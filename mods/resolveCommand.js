@@ -189,9 +189,15 @@ function customAction(action, parameters) {
             }
             break;
         case 'CHECK_USB':
+            console.log('[USB] Manual check triggered from settings');
             if (typeof window.checkUSB === 'function') {
-                window.checkUSB();
-                showToast('USB Check', 'Checking for USB drives...');
+                try {
+                    window.checkUSB();
+                    showToast('USB Check', 'Checking for USB drives...');
+                } catch (e) {
+                    console.error('[USB] Check failed:', e);
+                    showToast('USB Check', 'Error: ' + e.message);
+                }
             } else {
                 showToast('USB Check', 'USB check not available');
             }

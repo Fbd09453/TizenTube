@@ -75,49 +75,63 @@
     let logs = [];
     window.consoleAutoScroll = true;
 
-    // Scroll functions - NOTE: newest logs are at TOP now
-    window.scrollConsoleToBottom = function() {
-        if (!consoleDiv || !enabled) {
-            console.log('[Scroll] Cannot scroll:', { div: !!consoleDiv, enabled });
+    // Simple, WORKING scroll functions
+    window.scrollConsoleUp = function() {
+        if (!consoleDiv) {
+            console.log('[Scroll] ERROR: No console div');
             return;
         }
-        const oldScroll = consoleDiv.scrollTop;
-        consoleDiv.scrollTop = consoleDiv.scrollHeight;
-        console.log('[Scroll] To bottom (oldest):', oldScroll, '→', consoleDiv.scrollTop);
-    };
-
-    window.scrollConsoleUp = function() {
-        if (!consoleDiv) return;
-        const oldScroll = consoleDiv.scrollTop;
-        window.consoleAutoScroll = false;
+        const before = consoleDiv.scrollTop;
         consoleDiv.scrollTop = Math.max(0, consoleDiv.scrollTop - 100);
-        console.log('[Scroll] UP (older):', oldScroll, '→', consoleDiv.scrollTop);
+        const after = consoleDiv.scrollTop;
+        console.log(`[Scroll] UP: ${before} → ${after} (height: ${consoleDiv.scrollHeight})`);
+        window.consoleAutoScroll = false;
         updateBorder();
     };
 
     window.scrollConsoleDown = function() {
-        if (!consoleDiv) return;
-        const oldScroll = consoleDiv.scrollTop;
+        if (!consoleDiv) {
+            console.log('[Scroll] ERROR: No console div');
+            return;
+        }
+        const before = consoleDiv.scrollTop;
+        const maxScroll = consoleDiv.scrollHeight - consoleDiv.clientHeight;
+        consoleDiv.scrollTop = Math.min(maxScroll, consoleDiv.scrollTop + 100);
+        const after = consoleDiv.scrollTop;
+        console.log(`[Scroll] DOWN: ${before} → ${after} (max: ${maxScroll})`);
         window.consoleAutoScroll = false;
-        consoleDiv.scrollTop = Math.min(consoleDiv.scrollHeight, consoleDiv.scrollTop + 100);
-        console.log('[Scroll] DOWN (newer):', oldScroll, '→', consoleDiv.scrollTop);
         updateBorder();
     };
 
     window.scrollConsoleToTop = function() {
-        if (!consoleDiv) return;
-        const oldScroll = consoleDiv.scrollTop;
-        window.consoleAutoScroll = true;
+        if (!consoleDiv) {
+            console.log('[Scroll] ERROR: No console div');
+            return;
+        }
+        const before = consoleDiv.scrollTop;
         consoleDiv.scrollTop = 0;
-        console.log('[Scroll] To top (newest):', oldScroll, '→', consoleDiv.scrollTop);
+        console.log(`[Scroll] To TOP: ${before} → 0`);
+        window.consoleAutoScroll = true;
+        updateBorder();
+    };
+
+    window.scrollConsoleToBottom = function() {
+        if (!consoleDiv) {
+            console.log('[Scroll] ERROR: No console div');
+            return;
+        }
+        const before = consoleDiv.scrollTop;
+        const maxScroll = consoleDiv.scrollHeight - consoleDiv.clientHeight;
+        consoleDiv.scrollTop = maxScroll;
+        console.log(`[Scroll] To BOTTOM: ${before} → ${maxScroll}`);
         updateBorder();
     };
 
     window.enableConsoleAutoScroll = function() {
         window.consoleAutoScroll = true;
-        console.log('[Scroll] Jumped to newest logs (top)');
+        console.log('[Scroll] Auto-scroll ON - jumped to TOP');
         updateBorder();
-        consoleDiv.scrollTop = 0;
+        if (consoleDiv) consoleDiv.scrollTop = 0;
     };
 
     function updateBorder() {
@@ -308,7 +322,7 @@
     setTimeout(detectUSB, 20000);
 
     console.log('[Console] ========================================');
-    console.log('[Console] Visual Console v100 - NEWEST FIRST');
+    console.log('[Console] Visual Console v105 - NEWEST FIRST');
     console.log('[Console] ========================================');
     console.log('[Console] ⚡ NEWEST LOGS AT TOP (scroll down for older)');
     console.log('[Console] Remote Controls:');
