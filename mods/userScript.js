@@ -35,6 +35,18 @@
         'center': { top: '50%', left: '50%', right: '', bottom: '', transform: 'translate(-50%, -50%)' }
     };
 
+    const getConsoleHeight = () => {
+        try {
+            const config = JSON.parse(window.localStorage[CONFIG_KEY] || '{}');
+            return config.debugConsoleHeight || '500';
+        } catch (e) {
+            return '500';
+        }
+    };
+
+
+    let currentHeight = getConsoleHeight();
+
     const consoleDiv = document.createElement('div');
     consoleDiv.id = 'tv-debug-console';
     
@@ -42,7 +54,7 @@
     consoleDiv.style.cssText = `
         position: fixed;
         width: 900px;
-        height: 500px;
+        height: ${currentHeight}px;
         background: rgba(0, 0, 0, 0.95);
         color: #0f0;
         font-family: monospace;
@@ -227,6 +239,11 @@
                 const posStyles = positions[newPosition] || positions['bottom-right'];
                 if (consoleDiv) Object.assign(consoleDiv.style, posStyles);
             }
+            const newHeight = config.debugConsoleHeight || '500';
+            if (newHeight !== currentHeight) {
+                currentHeight = newHeight;
+                if (consoleDiv) consoleDiv.style.height = newHeight + 'px';
+            }
         } catch (e) {}
     }, 500);
 
@@ -258,90 +275,97 @@
     }
     
     function detectUSB() {
-        if (!getUSBMonitoringEnabled()) return;
-        
-        usbCheckCount++;
-        console.log(`[USB] ========================================`);
-        console.log(`[USB] Check #${usbCheckCount} - Scanning drives...`);
-        console.log(`[USB] ========================================`);
-        
-        if (window.tizen && window.tizen.filesystem) {
-            try {
-                console.log('[USB] ✓ Tizen filesystem API available');
-                
-                const storages = window.tizen.filesystem.listStorages();
-                console.log(`[USB] Found ${storages.length} storage device(s)`);
-                console.log('[USB] ----------------------------------------');
-                
-                storages.forEach((storage, idx) => {
-                    const icon = storage.type === 'EXTERNAL' ? '📁' : '💾';
-                    console.log(`[USB] ${icon} Storage ${idx + 1}:`);
-                    console.log(`[USB]   Label: ${storage.label}`);
-                    console.log(`[USB]   Type: ${storage.type}`);
-                    console.log(`[USB]   State: ${storage.state}`);
-                    
-                    try {
-                        window.tizen.filesystem.resolve(
-                            storage.label,
-                            function(dir) {
-                                console.log(`[USB]   ✓ Resolved path: ${dir.fullPath}`);
-                                
-                                dir.listFiles(
-                                    function(files) {
-                                        console.log(`[USB]   📂 Contents (${files.length} items):`);
-                                        
-                                        const folders = files.filter(f => f.isDirectory);
-                                        const regularFiles = files.filter(f => f.isFile);
-                                        
-                                        if (folders.length > 0) {
-                                            console.log(`[USB]   📁 Folders (${folders.length}):`);
-                                            folders.slice(0, 10).forEach(folder => {
-                                                console.log(`[USB]     📁 ${folder.name}/`);
-                                            });
-                                            if (folders.length > 10) {
-                                                console.log(`[USB]     ... and ${folders.length - 10} more folders`);
-                                            }
-                                        }
-                                        
-                                        if (regularFiles.length > 0) {
-                                            console.log(`[USB]   📄 Files (${regularFiles.length}):`);
-                                            regularFiles.slice(0, 10).forEach(file => {
-                                                const sizeKB = (file.fileSize / 1024).toFixed(1);
-                                                const sizeMB = file.fileSize > 1024 * 1024 ? 
-                                                    ` (${(file.fileSize / (1024 * 1024)).toFixed(1)}MB)` : '';
-                                                console.log(`[USB]     📄 ${file.name} - ${sizeKB}KB${sizeMB}`);
-                                            });
-                                            if (regularFiles.length > 10) {
-                                                console.log(`[USB]     ... and ${regularFiles.length - 10} more files`);
-                                            }
-                                        }
-                                        
-                                        if (files.length === 0) {
-                                            console.log(`[USB]   (empty directory)`);
-                                        }
-                                    },
-                                    function(err) {
-                                        console.log(`[USB]   ✗ Error listing files: ${err.message}`);
-                                    }
-                                );
-                            },
-                            function(err) {
-                                console.log(`[USB]   ✗ Error resolving: ${err.message}`);
-                            }
-                        );
-                    } catch (e) {
-                        console.log(`[USB]   ✗ Exception: ${e.message}`);
-                    }
-                    console.log('[USB] ----------------------------------------');
-                });
-            } catch (e) {
-                console.log('[USB] ✗ Tizen filesystem error:', e.message);
-            }
-        } else {
-            console.log('[USB] ✗ Tizen filesystem API not available');
+        if (!getUSBMonitoringEnabled()) {
+            console.log('[USB] Monitoring disabled in settings');
+            return;
         }
         
-        console.log(`[USB] ========================================`);
+        usbCheckCount++;
+        console.log('[USB] ======== Check #' + usbCheckCount + ' ========');
+        
+        if (!window.tizen) {
+            console.log('[USB] ERROR: window.tizen not available');
+            return;
+        }
+        
+        if (!window.tizen.filesystem) {
+            console.log('[USB] ERROR: tizen.filesystem not available');
+            return;
+        }
+        
+        try {
+            console.log('[USB] Tizen filesystem API available');
+            
+            const storages = window.tizen.filesystem.listStorages();
+            console.log('[USB] Found', storages.length, 'storage(s)');
+            
+            if (storages.length === 0) {
+                console.log('[USB] No storage devices detected');
+                return;
+            }
+            
+            storages.forEach((storage, idx) => {
+                console.log('[USB] --- Storage', (idx + 1), '---');
+                console.log('[USB]   Label:', storage.label);
+                console.log('[USB]   Type:', storage.type);
+                console.log('[USB]   State:', storage.state);
+                
+                if (storage.type !== 'EXTERNAL') {
+                    console.log('[USB]   Skipping (not external)');
+                    return;
+                }
+                
+                if (storage.state !== 'MOUNTED') {
+                    console.log('[USB]   Skipping (not mounted)');
+                    return;
+                }
+                
+                try {
+                    window.tizen.filesystem.resolve(
+                        storage.label,
+                        function(dir) {
+                            console.log('[USB]   Path:', dir.fullPath);
+                            
+                            dir.listFiles(
+                                function(files) {
+                                    console.log('[USB]   Files:', files.length);
+                                    
+                                    const folders = files.filter(f => f.isDirectory);
+                                    const regularFiles = files.filter(f => f.isFile);
+                                    
+                                    console.log('[USB]   Folders:', folders.length, '| Files:', regularFiles.length);
+                                    
+                                    if (folders.length > 0) {
+                                        folders.slice(0, 5).forEach(f => console.log('[USB]     📁', f.name));
+                                        if (folders.length > 5) console.log('[USB]     ... +' + (folders.length - 5) + ' more');
+                                    }
+                                    
+                                    if (regularFiles.length > 0) {
+                                        regularFiles.slice(0, 5).forEach(f => {
+                                            const sizeMB = (f.fileSize / 1024 / 1024).toFixed(1);
+                                            console.log('[USB]     📄', f.name, '-', sizeMB + 'MB');
+                                        });
+                                        if (regularFiles.length > 5) console.log('[USB]     ... +' + (regularFiles.length - 5) + ' more');
+                                    }
+                                },
+                                function(err) {
+                                    console.log('[USB]   List error:', err.message);
+                                }
+                            );
+                        },
+                        function(err) {
+                            console.log('[USB]   Resolve error:', err.message);
+                        }
+                    );
+                } catch (e) {
+                    console.log('[USB]   Exception:', e.message);
+                }
+            });
+        } catch (e) {
+            console.log('[USB] ERROR:', e.message);
+        }
+        
+        console.log('[USB] ========================================');
     }
     
     let usbCheckCount = 0;

@@ -758,6 +758,38 @@ export default function modernUI(update, parameters) {
                         ]
                     },
                     {
+                        name: 'Debug Console Height',
+                        icon: 'SETTINGS',
+                        value: null,
+                        menuId: 'tt-debug-console-height',
+                        menuHeader: {
+                            title: 'Debug Console Height',
+                            subtitle: 'Choose console window height'
+                        },
+                        options: [
+                            {
+                                name: 'Normal (500px)',
+                                key: 'debugConsoleHeight',
+                                value: '500'
+                            },
+                            {
+                                name: 'Tall (800px)',
+                                key: 'debugConsoleHeight',
+                                value: '800'
+                            },
+                            {
+                                name: 'Double (1000px)',
+                                key: 'debugConsoleHeight',
+                                value: '1000'
+                            },
+                            {
+                                name: 'Full Screen (1200px)',
+                                key: 'debugConsoleHeight',
+                                value: '1200'
+                            }
+                        ]
+                    },
+                    {
                         name: 'USB Drive Monitoring',
                         icon: 'SYSTEM_UPDATE',
                         value: 'enableUSBMonitoring'

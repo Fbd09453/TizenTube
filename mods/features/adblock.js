@@ -143,10 +143,25 @@ JSON.parse = function () {
   if (r?.contents?.tvBrowseRenderer?.content?.tvSecondaryNavRenderer?.sections) {
     if (!r.__tizentubeProcessedSecondary) {
       r.__tizentubeProcessedSecondary = true;
-      console.log('SHELF_ENTRY', 'Processing tvSecondaryNavRenderer sections');
-      for (const section of r.contents.tvBrowseRenderer.content.tvSecondaryNavRenderer.sections) {
-        for (const tab of section.tvSecondaryNavSectionRenderer.tabs) {
-          processShelves(tab.tabRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents);
+      const sections = r.contents.tvBrowseRenderer.content.tvSecondaryNavRenderer.sections;
+      console.log('[SECONDARY_NAV] Processing', sections.length, 'sections');
+      
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        console.log('[SECONDARY_NAV] Section', (i + 1), '- tabs:', section.tvSecondaryNavSectionRenderer?.tabs?.length || 0);
+        
+        if (section.tvSecondaryNavSectionRenderer?.tabs) {
+          for (let j = 0; j < section.tvSecondaryNavSectionRenderer.tabs.length; j++) {
+            const tab = section.tvSecondaryNavSectionRenderer.tabs[j];
+            const contents = tab.tabRenderer?.content?.tvSurfaceContentRenderer?.content?.sectionListRenderer?.contents;
+            
+            if (contents) {
+              console.log('[SECONDARY_NAV] Tab', (j + 1), '- processing', contents.length, 'shelves');
+              processShelves(contents);
+            } else {
+              console.log('[SECONDARY_NAV] Tab', (j + 1), '- no contents found');
+            }
+          }
         }
       }
     } else {
@@ -657,57 +672,40 @@ function addLongPress(items) {
 
 function hideVideo(items) {
   if (!configRead('enableHideWatchedVideos')) {
-    console.log('[HIDE] Feature disabled, returning all items');
     return items;
   }
   
-  if (!Array.isArray(items)) {
-    console.log('[HIDE] Items not an array:', typeof items);
-    return items;
-  }
+  if (!Array.isArray(items)) return items;
   
   const page = getCurrentPage();
   const configPages = configRead('hideWatchedVideosPages') || [];
   const threshold = Number(configRead('hideWatchedVideosThreshold') || 0);
   const shouldHideOnThisPage = configPages.length === 0 || configPages.includes(page);
   
-  console.log('[HIDE] Processing', items.length, 'items on page:', page);
-  console.log('[HIDE] Config:', {
-    shouldHideOnThisPage,
-    configPages,
-    threshold,
-    page
-  });
-  
   if (!shouldHideOnThisPage) {
-    console.log('[HIDE] Page not in config, skipping');
     return items;
   }
   
   if (page === 'playlist' && !configRead('enableHideWatchedInPlaylists')) {
-    console.log('[HIDE] Playlist hiding disabled');
     return items;
   }
   
   const beforeCount = items.length;
   let hiddenCount = 0;
-  let checkedCount = 0;
+  let noProgressCount = 0;
   
   const filtered = items.filter(item => {
     if (!item) return false;
     
-    checkedCount++;
     const progressBar = findProgressBar(item);
     
     if (!progressBar) {
-      console.log('[HIDE] Item', checkedCount, '- No progress bar found');
+      noProgressCount++;
       return true;
     }
     
     const percentWatched = Number(progressBar.percentDurationWatched || 0);
     const shouldHide = percentWatched > threshold;
-    
-    console.log('[HIDE] Item', checkedCount, '- Progress:', percentWatched + '%', 'Threshold:', threshold + '%', 'Hide?', shouldHide);
     
     if (shouldHide) {
       hiddenCount++;
@@ -716,24 +714,23 @@ function hideVideo(items) {
                      item.richItemRenderer?.content?.videoRenderer?.videoId || 
                      'unknown';
       
-      console.log('[HIDE] HIDING video:', videoId, 'watched:', percentWatched + '%');
+      console.log('[HIDE] Hiding:', videoId, '(' + percentWatched + '% watched)');
     }
     
     return !shouldHide;
   });
   
-  console.log('[HIDE] RESULT: Before:', beforeCount, 'After:', filtered.length, 'Hidden:', hiddenCount);
+  if (hiddenCount > 0 || noProgressCount > 0) {
+    console.log('[HIDE]', page + ':', beforeCount, 'items →', filtered.length, 'shown |', hiddenCount, 'hidden |', noProgressCount, 'no progress');
+  }
   
   return filtered;
 }
 
 function findProgressBar(item) {
-  if (!item) {
-    console.log('[PROGRESS] Item is null/undefined');
-    return null;
-  }
+  if (!item) return null;
   
-  const checkRenderer = (renderer, rendererName) => {
+  const checkRenderer = (renderer) => {
     if (!renderer) return null;
     
     const overlayPaths = [
@@ -742,38 +739,31 @@ function findProgressBar(item) {
       renderer.thumbnail?.thumbnailOverlays
     ];
     
-    for (let pathIdx = 0; pathIdx < overlayPaths.length; pathIdx++) {
-      const overlays = overlayPaths[pathIdx];
+    for (const overlays of overlayPaths) {
       if (!Array.isArray(overlays)) continue;
-      
-      for (let i = 0; i < overlays.length; i++) {
-        const overlay = overlays[i];
-        if (overlay?.thumbnailOverlayResumePlaybackRenderer) {
-          const progress = overlay.thumbnailOverlayResumePlaybackRenderer;
-          console.log('[PROGRESS] Found in', rendererName, 'path', pathIdx, ':', progress.percentDurationWatched + '%');
-          return progress;
-        }
+      const progressOverlay = overlays.find(o => o?.thumbnailOverlayResumePlaybackRenderer);
+      if (progressOverlay) {
+        return progressOverlay.thumbnailOverlayResumePlaybackRenderer;
       }
     }
     return null;
   };
   
   const rendererTypes = [
-    { renderer: item.tileRenderer, name: 'tileRenderer' },
-    { renderer: item.playlistVideoRenderer, name: 'playlistVideoRenderer' },
-    { renderer: item.compactVideoRenderer, name: 'compactVideoRenderer' },
-    { renderer: item.gridVideoRenderer, name: 'gridVideoRenderer' },
-    { renderer: item.videoRenderer, name: 'videoRenderer' },
-    { renderer: item.richItemRenderer?.content?.videoRenderer, name: 'richItemRenderer.videoRenderer' },
-    { renderer: item.richItemRenderer?.content?.reelItemRenderer, name: 'richItemRenderer.reelItemRenderer' }
+    item.tileRenderer,
+    item.playlistVideoRenderer,
+    item.compactVideoRenderer,
+    item.gridVideoRenderer,
+    item.videoRenderer,
+    item.richItemRenderer?.content?.videoRenderer,
+    item.richItemRenderer?.content?.reelItemRenderer
   ];
   
-  for (const { renderer, name } of rendererTypes) {
-    const result = checkRenderer(renderer, name);
+  for (const renderer of rendererTypes) {
+    const result = checkRenderer(renderer);
     if (result) return result;
   }
   
-  console.log('[PROGRESS] No progress bar found in item');
   return null;
 }
 
