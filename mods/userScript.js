@@ -2,7 +2,7 @@
 // This creates an on-screen console you can see on your TV
 // With WORKING auto-scroll and keyboard controls
 
-// Visual Console for TV - v100 NEWEST FIRST
+// Visual Console for TV - NEWEST FIRST
 (function() {
     const CONFIG_KEY = 'ytaf-configuration';
     
@@ -75,63 +75,74 @@
     let logs = [];
     window.consoleAutoScroll = true;
 
-    // Simple, WORKING scroll functions
+    // Scroll functions with EXTENSIVE debugging
     window.scrollConsoleUp = function() {
+        console.log('[Scroll] === UP function called ===');
+        console.log('[Scroll] consoleDiv exists:', !!consoleDiv);
         if (!consoleDiv) {
-            console.log('[Scroll] ERROR: No console div');
+            console.log('[Scroll] ERROR: No console div!');
             return;
         }
+        
+        console.log('[Scroll] Current scrollTop:', consoleDiv.scrollTop);
+        console.log('[Scroll] scrollHeight:', consoleDiv.scrollHeight);
+        console.log('[Scroll] clientHeight:', consoleDiv.clientHeight);
+        console.log('[Scroll] Computed overflow-y:', window.getComputedStyle(consoleDiv).overflowY);
+        
         const before = consoleDiv.scrollTop;
         consoleDiv.scrollTop = Math.max(0, consoleDiv.scrollTop - 100);
         const after = consoleDiv.scrollTop;
-        console.log(`[Scroll] UP: ${before} → ${after} (height: ${consoleDiv.scrollHeight})`);
+        
+        console.log('[Scroll] Changed from', before, 'to', after);
+        console.log('[Scroll] Actual change:', (before - after));
+        
+        if (before === after) {
+            console.log('[Scroll] WARNING: Scroll did not change! Already at top?');
+        }
+        
         window.consoleAutoScroll = false;
         updateBorder();
     };
 
     window.scrollConsoleDown = function() {
+        console.log('[Scroll] === DOWN function called ===');
+        console.log('[Scroll] consoleDiv exists:', !!consoleDiv);
         if (!consoleDiv) {
-            console.log('[Scroll] ERROR: No console div');
+            console.log('[Scroll] ERROR: No console div!');
             return;
         }
+        
+        console.log('[Scroll] Current scrollTop:', consoleDiv.scrollTop);
+        console.log('[Scroll] scrollHeight:', consoleDiv.scrollHeight);
+        console.log('[Scroll] clientHeight:', consoleDiv.clientHeight);
+        console.log('[Scroll] Max scroll:', consoleDiv.scrollHeight - consoleDiv.clientHeight);
+        
         const before = consoleDiv.scrollTop;
         const maxScroll = consoleDiv.scrollHeight - consoleDiv.clientHeight;
         consoleDiv.scrollTop = Math.min(maxScroll, consoleDiv.scrollTop + 100);
         const after = consoleDiv.scrollTop;
-        console.log(`[Scroll] DOWN: ${before} → ${after} (max: ${maxScroll})`);
+        
+        console.log('[Scroll] Changed from', before, 'to', after);
+        console.log('[Scroll] Actual change:', (after - before));
+        
+        if (before === after) {
+            console.log('[Scroll] WARNING: Scroll did not change! Already at bottom or not scrollable?');
+            console.log('[Scroll] Is scrollable?', maxScroll > 0);
+        }
+        
         window.consoleAutoScroll = false;
         updateBorder();
     };
 
-    window.scrollConsoleToTop = function() {
-        if (!consoleDiv) {
-            console.log('[Scroll] ERROR: No console div');
-            return;
-        }
-        const before = consoleDiv.scrollTop;
-        consoleDiv.scrollTop = 0;
-        console.log(`[Scroll] To TOP: ${before} → 0`);
-        window.consoleAutoScroll = true;
-        updateBorder();
-    };
-
-    window.scrollConsoleToBottom = function() {
-        if (!consoleDiv) {
-            console.log('[Scroll] ERROR: No console div');
-            return;
-        }
-        const before = consoleDiv.scrollTop;
-        const maxScroll = consoleDiv.scrollHeight - consoleDiv.clientHeight;
-        consoleDiv.scrollTop = maxScroll;
-        console.log(`[Scroll] To BOTTOM: ${before} → ${maxScroll}`);
-        updateBorder();
-    };
-
     window.enableConsoleAutoScroll = function() {
+        console.log('[Scroll] === AUTO-SCROLL TO TOP ===');
         window.consoleAutoScroll = true;
-        console.log('[Scroll] Auto-scroll ON - jumped to TOP');
         updateBorder();
-        if (consoleDiv) consoleDiv.scrollTop = 0;
+        if (consoleDiv) {
+            const before = consoleDiv.scrollTop;
+            consoleDiv.scrollTop = 0;
+            console.log('[Scroll] Jumped to top:', before, '→', consoleDiv.scrollTop);
+        }
     };
 
     function updateBorder() {
@@ -317,12 +328,8 @@
         detectUSB();
     };
     
-    setTimeout(detectUSB, 1000);
-    setTimeout(detectUSB, 5000);
-    setTimeout(detectUSB, 20000);
-
     console.log('[Console] ========================================');
-    console.log('[Console] Visual Console v110 - NEWEST FIRST');
+    console.log('[Console] Visual Console v115 - NEWEST FIRST');
     console.log('[Console] ========================================');
     console.log('[Console] ⚡ NEWEST LOGS AT TOP (scroll down for older)');
     console.log('[Console] Remote Controls:');

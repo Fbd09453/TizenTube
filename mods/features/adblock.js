@@ -49,36 +49,37 @@ JSON.parse = function () {
   // Drop "masthead" ad from home screen
   if (r?.contents?.tvBrowseRenderer?.content?.tvSurfaceContentRenderer?.content?.sectionListRenderer?.contents) {
     const currentPage = getCurrentPage();
-    console.log('[JSON.parse] tvBrowseRenderer detected, page:', currentPage);
     
-    if (adBlockEnabled) {
-      const beforeAds = r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.length;
-      r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents =
-        r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.filter(
-          (elm) => !elm.adSlotRenderer
-        );
+    // ONLY process once per unique response object
+    if (!r.__tizentubeProcessedBrowse) {
+      r.__tizentubeProcessedBrowse = true;
+      console.log('[JSON.parse] tvBrowseRenderer detected, page:', currentPage);
+      
+      if (adBlockEnabled) {
+        const beforeAds = r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.length;
+        r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents =
+          r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.filter(
+            (elm) => !elm.adSlotRenderer
+          );
 
-      for (const shelve of r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents) {
-        if (shelve.shelfRenderer) {
-          shelve.shelfRenderer.content.horizontalListRenderer.items =
-            shelve.shelfRenderer.content.horizontalListRenderer.items.filter(
-              (item) => !item.adSlotRenderer
-            );
+        for (const shelve of r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents) {
+          if (shelve.shelfRenderer) {
+            shelve.shelfRenderer.content.horizontalListRenderer.items =
+              shelve.shelfRenderer.content.horizontalListRenderer.items.filter(
+                (item) => !item.adSlotRenderer
+              );
+          }
+        }
+        
+        const afterAds = r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.length;
+        if (beforeAds !== afterAds) {
+          logger.info('ADBLOCK', 'Removed masthead ads', { removed: beforeAds - afterAds });
         }
       }
-      
-      const afterAds = r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.length;
-      if (beforeAds !== afterAds) {
-        logger.info('ADBLOCK', 'Removed masthead ads', { removed: beforeAds - afterAds });
-      }
-    }
 
-    // ONLY process if we haven't already processed this response
-    if (!r.__tizentubeProcessed) {
-      r.__tizentubeProcessed = true;
       processShelves(r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents);
     } else {
-      console.log('[JSON.parse] Already processed, skipping duplicate');
+      console.log('[JSON.parse] tvBrowseRenderer already processed, SKIPPING');
     }
   }
 
@@ -109,15 +110,15 @@ JSON.parse = function () {
   }
 
   if (r?.contents?.sectionListRenderer?.contents) {
-    if (!r.__tizentubeProcessed) {
-      r.__tizentubeProcessed = true;
+    if (!r.__tizentubeProcessedSection) {
+      r.__tizentubeProcessedSection = true;
       console.log('SHELF_ENTRY', 'Processing sectionListRenderer.contents', {
         count: r.contents.sectionListRenderer.contents.length,
         page: getCurrentPage()
       });
       processShelves(r.contents.sectionListRenderer.contents);
     } else {
-      console.log('[JSON.parse] sectionListRenderer already processed, skipping');
+      console.log('[JSON.parse] sectionListRenderer already processed, SKIPPING');
     }
   }
 
@@ -140,11 +141,16 @@ JSON.parse = function () {
   }
 
   if (r?.contents?.tvBrowseRenderer?.content?.tvSecondaryNavRenderer?.sections) {
-    console.log('SHELF_ENTRY', 'Processing tvSecondaryNavRenderer sections');
-    for (const section of r.contents.tvBrowseRenderer.content.tvSecondaryNavRenderer.sections) {
-      for (const tab of section.tvSecondaryNavSectionRenderer.tabs) {
-        processShelves(tab.tabRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents);
+    if (!r.__tizentubeProcessedSecondary) {
+      r.__tizentubeProcessedSecondary = true;
+      console.log('SHELF_ENTRY', 'Processing tvSecondaryNavRenderer sections');
+      for (const section of r.contents.tvBrowseRenderer.content.tvSecondaryNavRenderer.sections) {
+        for (const tab of section.tvSecondaryNavSectionRenderer.tabs) {
+          processShelves(tab.tabRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents);
+        }
       }
+    } else {
+      console.log('[JSON.parse] tvSecondaryNavRenderer already processed, SKIPPING');
     }
   }
 
@@ -296,23 +302,15 @@ function processShelves(shelves, shouldAddPreviews = true) {
   const configPages = configRead('hideWatchedVideosPages') || [];
   const shouldHideWatched = hideWatchedEnabled && (configPages.length === 0 || configPages.includes(page));
   
-  console.log('[SHELF_DEBUG] Page detection:', {
-    page: page,
-    hash: location.hash,
-    pathname: location.pathname,
-    search: location.search,
-    hideWatchedEnabled: hideWatchedEnabled,
-    configPages: configPages,
-    pageIncluded: configPages.includes(page),
-    shouldHideWatched: shouldHideWatched
-  });
-  
-  logger.info('SHELF_PROCESS_START', `Processing ${shelves.length} shelves on ${page}`, {
-    shortsEnabled,
-    hideWatchedEnabled,
-    shouldHideWatched,
-    threshold: configRead('hideWatchedVideosThreshold')
-  });
+  console.log('[SHELF_PROCESS] ========================================');
+  console.log('[SHELF_PROCESS] START - Processing', shelves.length, 'shelves');
+  console.log('[SHELF_PROCESS] Page:', page);
+  console.log('[SHELF_PROCESS] Shorts enabled:', shortsEnabled);
+  console.log('[SHELF_PROCESS] Hide watched enabled:', hideWatchedEnabled);
+  console.log('[SHELF_PROCESS] Config pages:', configPages);
+  console.log('[SHELF_PROCESS] Should hide watched:', shouldHideWatched);
+  console.log('[SHELF_PROCESS] Threshold:', configRead('hideWatchedVideosThreshold'));
+  console.log('[SHELF_PROCESS] ========================================');
   
   let totalItemsBefore = 0;
   let totalItemsAfter = 0;
@@ -326,6 +324,8 @@ function processShelves(shelves, shouldAddPreviews = true) {
     let itemsBefore = 0;
     let itemsAfter = 0;
     
+    console.log('[SHELF_PROCESS] ------ Processing shelf', (shelves.length - i), 'of', shelves.length, '------');
+    
     // Handle shelfRenderer
     if (shelve.shelfRenderer) {
       // horizontalListRenderer
@@ -334,6 +334,8 @@ function processShelves(shelves, shouldAddPreviews = true) {
         let items = shelve.shelfRenderer.content.horizontalListRenderer.items;
         itemsBefore = items.length;
         
+        console.log('[SHELF_PROCESS] Type:', shelfType, '| Items:', itemsBefore);
+        
         deArrowify(items);
         hqify(items);
         addLongPress(items);
@@ -341,7 +343,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
         
         if (!shortsEnabled) {
           if (shelve.shelfRenderer.tvhtml5ShelfRendererType === 'TVHTML5_SHELF_RENDERER_TYPE_SHORTS') {
-            logger.info('SHELF_REMOVED', 'Removing entire shorts shelf', { type: shelfType, page });
+            console.log('[SHELF_PROCESS] Removing entire SHORTS shelf');
             shelves.splice(i, 1);
             shelvesRemoved++;
             continue;
@@ -350,17 +352,19 @@ function processShelves(shelves, shouldAddPreviews = true) {
           const beforeShortFilter = items.length;
           items = items.filter(item => !isShortItem(item));
           if (beforeShortFilter !== items.length) {
-            logger.info('SHORTS_FILTERED', `Removed ${beforeShortFilter - items.length} shorts from ${shelfType}`, { page });
+            console.log('[SHELF_PROCESS] Filtered', (beforeShortFilter - items.length), 'shorts from', shelfType);
           }
         }
         
+        console.log('[SHELF_PROCESS] Before hideVideo:', items.length, 'items');
         items = hideVideo(items);
+        console.log('[SHELF_PROCESS] After hideVideo:', items.length, 'items');
         itemsAfter = items.length;
         
         shelve.shelfRenderer.content.horizontalListRenderer.items = items;
         
         if (items.length === 0) {
-          logger.info('SHELF_REMOVED', `Removing empty ${shelfType} shelf`, { page });
+          console.log('[SHELF_PROCESS] Shelf now empty, removing');
           shelves.splice(i, 1);
           shelvesRemoved++;
           continue;
@@ -373,6 +377,8 @@ function processShelves(shelves, shouldAddPreviews = true) {
         let items = shelve.shelfRenderer.content.gridRenderer.items;
         itemsBefore = items.length;
         
+        console.log('[SHELF_PROCESS] Type:', shelfType, '| Items:', itemsBefore);
+        
         deArrowify(items);
         hqify(items);
         addLongPress(items);
@@ -382,17 +388,19 @@ function processShelves(shelves, shouldAddPreviews = true) {
           const beforeShortFilter = items.length;
           items = items.filter(item => !isShortItem(item));
           if (beforeShortFilter !== items.length) {
-            logger.info('SHORTS_FILTERED', `Removed ${beforeShortFilter - items.length} shorts from ${shelfType}`, { page });
+            console.log('[SHELF_PROCESS] Filtered', (beforeShortFilter - items.length), 'shorts from', shelfType);
           }
         }
         
+        console.log('[SHELF_PROCESS] Before hideVideo:', items.length, 'items');
         items = hideVideo(items);
+        console.log('[SHELF_PROCESS] After hideVideo:', items.length, 'items');
         itemsAfter = items.length;
         
         shelve.shelfRenderer.content.gridRenderer.items = items;
         
         if (items.length === 0) {
-          logger.info('SHELF_REMOVED', `Removing empty ${shelfType} shelf`, { page });
+          console.log('[SHELF_PROCESS] Shelf now empty, removing');
           shelves.splice(i, 1);
           shelvesRemoved++;
           continue;
@@ -405,6 +413,8 @@ function processShelves(shelves, shouldAddPreviews = true) {
         let items = shelve.shelfRenderer.content.verticalListRenderer.items;
         itemsBefore = items.length;
         
+        console.log('[SHELF_PROCESS] Type:', shelfType, '| Items:', itemsBefore);
+        
         deArrowify(items);
         hqify(items);
         addLongPress(items);
@@ -414,17 +424,19 @@ function processShelves(shelves, shouldAddPreviews = true) {
           const beforeShortFilter = items.length;
           items = items.filter(item => !isShortItem(item));
           if (beforeShortFilter !== items.length) {
-            logger.info('SHORTS_FILTERED', `Removed ${beforeShortFilter - items.length} shorts from ${shelfType}`, { page });
+            console.log('[SHELF_PROCESS] Filtered', (beforeShortFilter - items.length), 'shorts from', shelfType);
           }
         }
         
+        console.log('[SHELF_PROCESS] Before hideVideo:', items.length, 'items');
         items = hideVideo(items);
+        console.log('[SHELF_PROCESS] After hideVideo:', items.length, 'items');
         itemsAfter = items.length;
         
         shelve.shelfRenderer.content.verticalListRenderer.items = items;
         
         if (items.length === 0) {
-          logger.info('SHELF_REMOVED', `Removing empty ${shelfType} shelf`, { page });
+          console.log('[SHELF_PROCESS] Shelf now empty, removing');
           shelves.splice(i, 1);
           shelvesRemoved++;
           continue;
@@ -438,6 +450,8 @@ function processShelves(shelves, shouldAddPreviews = true) {
       let contents = shelve.richShelfRenderer.content.richGridRenderer.contents;
       itemsBefore = contents.length;
       
+      console.log('[SHELF_PROCESS] Type:', shelfType, '| Items:', itemsBefore);
+      
       deArrowify(contents);
       hqify(contents);
       addLongPress(contents);
@@ -447,17 +461,19 @@ function processShelves(shelves, shouldAddPreviews = true) {
         const beforeShortFilter = contents.length;
         contents = contents.filter(item => !isShortItem(item));
         if (beforeShortFilter !== contents.length) {
-          logger.info('SHORTS_FILTERED', `Removed ${beforeShortFilter - contents.length} shorts from ${shelfType}`, { page });
+          console.log('[SHELF_PROCESS] Filtered', (beforeShortFilter - contents.length), 'shorts from', shelfType);
         }
       }
       
+      console.log('[SHELF_PROCESS] Before hideVideo:', contents.length, 'items');
       contents = hideVideo(contents);
+      console.log('[SHELF_PROCESS] After hideVideo:', contents.length, 'items');
       itemsAfter = contents.length;
       
       shelve.richShelfRenderer.content.richGridRenderer.contents = contents;
       
       if (contents.length === 0) {
-        logger.info('SHELF_REMOVED', `Removing empty ${shelfType} shelf`, { page });
+        console.log('[SHELF_PROCESS] Shelf now empty, removing');
         shelves.splice(i, 1);
         shelvesRemoved++;
         continue;
@@ -467,12 +483,14 @@ function processShelves(shelves, shouldAddPreviews = true) {
     // Handle richSectionRenderer
     else if (shelve.richSectionRenderer?.content?.richShelfRenderer) {
       shelfType = 'richSection';
+      console.log('[SHELF_PROCESS] Type:', shelfType);
+      
       if (!shortsEnabled) {
         const innerShelf = shelve.richSectionRenderer.content.richShelfRenderer;
         const contents = innerShelf?.content?.richGridRenderer?.contents;
         
         if (Array.isArray(contents) && contents.some(item => isShortItem(item))) {
-          logger.info('SHELF_REMOVED', 'Removing shorts richSection shelf', { page });
+          console.log('[SHELF_PROCESS] Removing shorts richSection shelf');
           shelves.splice(i, 1);
           shelvesRemoved++;
           continue;
@@ -486,6 +504,8 @@ function processShelves(shelves, shouldAddPreviews = true) {
       let items = shelve.gridRenderer.items;
       itemsBefore = items.length;
       
+      console.log('[SHELF_PROCESS] Type:', shelfType, '| Items:', itemsBefore);
+      
       deArrowify(items);
       hqify(items);
       addLongPress(items);
@@ -495,17 +515,19 @@ function processShelves(shelves, shouldAddPreviews = true) {
         const beforeShortFilter = items.length;
         items = items.filter(item => !isShortItem(item));
         if (beforeShortFilter !== items.length) {
-          logger.info('SHORTS_FILTERED', `Removed ${beforeShortFilter - items.length} shorts from ${shelfType}`, { page });
+          console.log('[SHELF_PROCESS] Filtered', (beforeShortFilter - items.length), 'shorts from', shelfType);
         }
       }
       
+      console.log('[SHELF_PROCESS] Before hideVideo:', items.length, 'items');
       items = hideVideo(items);
+      console.log('[SHELF_PROCESS] After hideVideo:', items.length, 'items');
       itemsAfter = items.length;
       
       shelve.gridRenderer.items = items;
       
       if (items.length === 0) {
-        logger.info('SHELF_REMOVED', `Removing empty ${shelfType} shelf`, { page });
+        console.log('[SHELF_PROCESS] Shelf now empty, removing');
         shelves.splice(i, 1);
         shelvesRemoved++;
         continue;
@@ -516,22 +538,18 @@ function processShelves(shelves, shouldAddPreviews = true) {
     totalItemsAfter += itemsAfter;
     
     if (itemsBefore > 0) {
-      console.log('SHELF_PROCESSED', `Processed ${shelfType} shelf`, {
-        before: itemsBefore,
-        after: itemsAfter,
-        filtered: itemsBefore - itemsAfter,
-        page
-      });
+      console.log('[SHELF_PROCESS] Shelf complete:', shelfType, '- Before:', itemsBefore, 'After:', itemsAfter);
     }
   }
   
-  logger.info('SHELF_PROCESS_COMPLETE', `Finished processing shelves on ${page}`, {
-    shelvesProcessed: shelves.length,
-    shelvesRemoved,
-    totalItemsBefore,
-    totalItemsAfter,
-    totalFiltered: totalItemsBefore - totalItemsAfter
-  });
+  console.log('[SHELF_PROCESS] ========================================');
+  console.log('[SHELF_PROCESS] COMPLETE');
+  console.log('[SHELF_PROCESS] Shelves processed:', shelves.length);
+  console.log('[SHELF_PROCESS] Shelves removed:', shelvesRemoved);
+  console.log('[SHELF_PROCESS] Total items before:', totalItemsBefore);
+  console.log('[SHELF_PROCESS] Total items after:', totalItemsAfter);
+  console.log('[SHELF_PROCESS] Total filtered:', totalItemsBefore - totalItemsAfter);
+  console.log('[SHELF_PROCESS] ========================================');
 }
 
 function addPreviews(items) {
@@ -639,40 +657,57 @@ function addLongPress(items) {
 
 function hideVideo(items) {
   if (!configRead('enableHideWatchedVideos')) {
+    console.log('[HIDE] Feature disabled, returning all items');
     return items;
   }
   
-  if (!Array.isArray(items)) return items;
+  if (!Array.isArray(items)) {
+    console.log('[HIDE] Items not an array:', typeof items);
+    return items;
+  }
   
   const page = getCurrentPage();
   const configPages = configRead('hideWatchedVideosPages') || [];
   const threshold = Number(configRead('hideWatchedVideosThreshold') || 0);
   const shouldHideOnThisPage = configPages.length === 0 || configPages.includes(page);
   
+  console.log('[HIDE] Processing', items.length, 'items on page:', page);
+  console.log('[HIDE] Config:', {
+    shouldHideOnThisPage,
+    configPages,
+    threshold,
+    page
+  });
+  
   if (!shouldHideOnThisPage) {
-    console.log('WATCHED_SKIP', `Skipping watched video hiding on ${page}`, {
-      configPages,
-      threshold
-    });
+    console.log('[HIDE] Page not in config, skipping');
     return items;
   }
   
   if (page === 'playlist' && !configRead('enableHideWatchedInPlaylists')) {
-    console.log('WATCHED_SKIP', 'Skipping watched video hiding in playlist (disabled)');
+    console.log('[HIDE] Playlist hiding disabled');
     return items;
   }
   
   const beforeCount = items.length;
   let hiddenCount = 0;
+  let checkedCount = 0;
   
   const filtered = items.filter(item => {
     if (!item) return false;
     
+    checkedCount++;
     const progressBar = findProgressBar(item);
-    if (!progressBar) return true;
+    
+    if (!progressBar) {
+      console.log('[HIDE] Item', checkedCount, '- No progress bar found');
+      return true;
+    }
     
     const percentWatched = Number(progressBar.percentDurationWatched || 0);
     const shouldHide = percentWatched > threshold;
+    
+    console.log('[HIDE] Item', checkedCount, '- Progress:', percentWatched + '%', 'Threshold:', threshold + '%', 'Hide?', shouldHide);
     
     if (shouldHide) {
       hiddenCount++;
@@ -681,31 +716,24 @@ function hideVideo(items) {
                      item.richItemRenderer?.content?.videoRenderer?.videoId || 
                      'unknown';
       
-      console.log('WATCHED_HIDDEN', `Hiding watched video ${videoId}`, {
-        percentWatched,
-        threshold,
-        page
-      });
+      console.log('[HIDE] HIDING video:', videoId, 'watched:', percentWatched + '%');
     }
     
     return !shouldHide;
   });
   
-  if (hiddenCount > 0) {
-    logger.info('WATCHED_FILTERED', `Hidden ${hiddenCount} watched videos on ${page}`, {
-      before: beforeCount,
-      after: filtered.length,
-      threshold
-    });
-  }
+  console.log('[HIDE] RESULT: Before:', beforeCount, 'After:', filtered.length, 'Hidden:', hiddenCount);
   
   return filtered;
 }
 
 function findProgressBar(item) {
-  if (!item) return null;
+  if (!item) {
+    console.log('[PROGRESS] Item is null/undefined');
+    return null;
+  }
   
-  const checkRenderer = (renderer) => {
+  const checkRenderer = (renderer, rendererName) => {
     if (!renderer) return null;
     
     const overlayPaths = [
@@ -714,31 +742,38 @@ function findProgressBar(item) {
       renderer.thumbnail?.thumbnailOverlays
     ];
     
-    for (const overlays of overlayPaths) {
+    for (let pathIdx = 0; pathIdx < overlayPaths.length; pathIdx++) {
+      const overlays = overlayPaths[pathIdx];
       if (!Array.isArray(overlays)) continue;
-      const progressOverlay = overlays.find(o => o?.thumbnailOverlayResumePlaybackRenderer);
-      if (progressOverlay) {
-        return progressOverlay.thumbnailOverlayResumePlaybackRenderer;
+      
+      for (let i = 0; i < overlays.length; i++) {
+        const overlay = overlays[i];
+        if (overlay?.thumbnailOverlayResumePlaybackRenderer) {
+          const progress = overlay.thumbnailOverlayResumePlaybackRenderer;
+          console.log('[PROGRESS] Found in', rendererName, 'path', pathIdx, ':', progress.percentDurationWatched + '%');
+          return progress;
+        }
       }
     }
     return null;
   };
   
   const rendererTypes = [
-    item.tileRenderer,
-    item.playlistVideoRenderer,
-    item.compactVideoRenderer,
-    item.gridVideoRenderer,
-    item.videoRenderer,
-    item.richItemRenderer?.content?.videoRenderer,
-    item.richItemRenderer?.content?.reelItemRenderer
+    { renderer: item.tileRenderer, name: 'tileRenderer' },
+    { renderer: item.playlistVideoRenderer, name: 'playlistVideoRenderer' },
+    { renderer: item.compactVideoRenderer, name: 'compactVideoRenderer' },
+    { renderer: item.gridVideoRenderer, name: 'gridVideoRenderer' },
+    { renderer: item.videoRenderer, name: 'videoRenderer' },
+    { renderer: item.richItemRenderer?.content?.videoRenderer, name: 'richItemRenderer.videoRenderer' },
+    { renderer: item.richItemRenderer?.content?.reelItemRenderer, name: 'richItemRenderer.reelItemRenderer' }
   ];
   
-  for (const renderer of rendererTypes) {
-    const result = checkRenderer(renderer);
+  for (const { renderer, name } of rendererTypes) {
+    const result = checkRenderer(renderer, name);
     if (result) return result;
   }
   
+  console.log('[PROGRESS] No progress bar found in item');
   return null;
 }
 
