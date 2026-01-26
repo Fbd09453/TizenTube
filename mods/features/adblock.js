@@ -781,17 +781,21 @@ function getCurrentPage() {
   // Log page changes COMPACTLY - ONLY WHEN ACTUALLY CHANGED
   const currentFullUrl = fullUrl;
   if (detectedPage !== lastDetectedPage || currentFullUrl !== lastFullUrl) {
-    console.log(`[PAGE] ${lastDetectedPage||'initial'} → ${detectedPage}`);
-    console.log(`[PAGE] URL: ${location.href}`);
-    console.log(`[PAGE] Hash: "${cleanHash}" | C: "${browseParam || 'none'}"`);
-    
-    const hideWatchedEnabled = configRead('enableHideWatchedVideos');
-    const configPages = configRead('hideWatchedVideosPages') || [];
-    const shouldHideWatched = hideWatchedEnabled && (configPages.length === 0 || configPages.includes(detectedPage));
-    const threshold = configRead('hideWatchedVideosThreshold');
-    
-    console.log(`[PAGE] HideWatched: ${shouldHideWatched ? 'YES' : 'NO'} | Enabled:${hideWatchedEnabled} | InConfigPages:${configPages.includes(detectedPage)} | Threshold:${threshold}%`);
-    console.log(`[PAGE] ConfigPages: [${configPages.join(', ')}]`);
+    // Only log if debug console is enabled
+    const debugEnabled = configRead('enableDebugConsole');
+    if (debugEnabled) {
+      console.log(`[PAGE] ${lastDetectedPage||'initial'} → ${detectedPage}`);
+      console.log(`[PAGE] URL: ${location.href}`);
+      console.log(`[PAGE] Hash: "${cleanHash}" | C: "${browseParam || 'none'}"`);
+      
+      const hideWatchedEnabled = configRead('enableHideWatchedVideos');
+      const configPages = configRead('hideWatchedVideosPages') || [];
+      const shouldHideWatched = hideWatchedEnabled && (configPages.length === 0 || configPages.includes(detectedPage));
+      const threshold = configRead('hideWatchedVideosThreshold');
+      
+      console.log(`[PAGE] HideWatched: ${shouldHideWatched ? 'YES' : 'NO'} | Enabled:${hideWatchedEnabled} | InConfigPages:${configPages.includes(detectedPage)} | Threshold:${threshold}%`);
+      console.log(`[PAGE] ConfigPages: [${configPages.join(', ')}]`);
+    }
     
     lastDetectedPage = detectedPage;
     lastFullUrl = currentFullUrl;

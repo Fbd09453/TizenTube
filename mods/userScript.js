@@ -26,6 +26,7 @@
 
     let currentPosition = getConsolePosition();
     let enabled = getConsoleEnabled();
+    let consoleVisible = enabled;
 
     const positions = {
         'top-left': { top: '0', left: '0', right: '', bottom: '', transform: '' },
@@ -43,7 +44,6 @@
             return '500';
         }
     };
-
 
     let currentHeight = getConsoleHeight();
 
@@ -88,95 +88,48 @@
     let logs = [];
     window.consoleAutoScroll = true;
 
-    // Scroll functions with EXTENSIVE debugging
+    // Scroll functions
     window.scrollConsoleUp = function() {
-        console.log('[Scroll] === UP function called ===');
-        if (!consoleDiv) {
-            console.log('[Scroll] ERROR: No console div!');
-            return;
-        }
-        
-        console.log('[Scroll] Before - scrollTop:', consoleDiv.scrollTop, 'scrollHeight:', consoleDiv.scrollHeight, 'clientHeight:', consoleDiv.clientHeight);
+        if (!consoleDiv || !enabled || !consoleVisible) return;
         
         const before = consoleDiv.scrollTop;
         const newScroll = Math.max(0, consoleDiv.scrollTop - 100);
         
-        // Try multiple methods to force scroll
         consoleDiv.scrollTop = newScroll;
         consoleDiv.scroll(0, newScroll);
         consoleDiv.scrollTo(0, newScroll);
         
-        // Force a reflow
         void consoleDiv.offsetHeight;
-        
-        const after = consoleDiv.scrollTop;
-        console.log('[Scroll] After - scrollTop:', after, '| Changed by:', (before - after));
-        
-        if (before === after && before > 0) {
-            console.log('[Scroll] FAILED to scroll! Trying direct DOM manipulation...');
-            // Last resort: try to force it
-            try {
-                Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop').set.call(consoleDiv, newScroll);
-                console.log('[Scroll] Direct manipulation result:', consoleDiv.scrollTop);
-            } catch (e) {
-                console.log('[Scroll] Direct manipulation failed:', e.message);
-            }
-        }
         
         window.consoleAutoScroll = false;
         updateBorder();
     };
 
     window.scrollConsoleDown = function() {
-        console.log('[Scroll] === DOWN function called ===');
-        if (!consoleDiv) {
-            console.log('[Scroll] ERROR: No console div!');
-            return;
-        }
-        
-        console.log('[Scroll] Before - scrollTop:', consoleDiv.scrollTop, 'scrollHeight:', consoleDiv.scrollHeight, 'clientHeight:', consoleDiv.clientHeight);
+        if (!consoleDiv || !enabled || !consoleVisible) return;
         
         const before = consoleDiv.scrollTop;
         const maxScroll = consoleDiv.scrollHeight - consoleDiv.clientHeight;
         const newScroll = Math.min(maxScroll, consoleDiv.scrollTop + 100);
         
-        console.log('[Scroll] Attempting to scroll to:', newScroll, '(max:', maxScroll + ')');
-        
-        // Try multiple methods to force scroll
         consoleDiv.scrollTop = newScroll;
         consoleDiv.scroll(0, newScroll);
         consoleDiv.scrollTo(0, newScroll);
         
-        // Force a reflow
         void consoleDiv.offsetHeight;
-        
-        const after = consoleDiv.scrollTop;
-        console.log('[Scroll] After - scrollTop:', after, '| Changed by:', (after - before));
-        
-        if (before === after && before < maxScroll) {
-            console.log('[Scroll] FAILED to scroll! Trying direct DOM manipulation...');
-            try {
-                Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop').set.call(consoleDiv, newScroll);
-                console.log('[Scroll] Direct manipulation result:', consoleDiv.scrollTop);
-            } catch (e) {
-                console.log('[Scroll] Direct manipulation failed:', e.message);
-            }
-        }
         
         window.consoleAutoScroll = false;
         updateBorder();
     };
 
     window.enableConsoleAutoScroll = function() {
-        console.log('[Scroll] === AUTO-SCROLL TO TOP ===');
+        if (!consoleDiv || !enabled || !consoleVisible) return;
+        
         window.consoleAutoScroll = true;
         updateBorder();
-        if (consoleDiv) {
-            consoleDiv.scrollTop = 0;
-            consoleDiv.scroll(0, 0);
-            consoleDiv.scrollTo(0, 0);
-            console.log('[Scroll] Jumped to top, scrollTop now:', consoleDiv.scrollTop);
-        }
+        consoleDiv.scrollTop = 0;
+        consoleDiv.scroll(0, 0);
+        consoleDiv.scrollTo(0, 0);
     };
 
     function updateBorder() {
@@ -187,17 +140,26 @@
 
     console.log = function(...args) {
         originalLog.apply(console, args);
-        addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'log');
+        // Only add to logs if console is enabled
+        if (enabled) {
+            addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'log');
+        }
     };
 
     console.error = function(...args) {
         originalError.apply(console, args);
-        addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'error');
+        // Only add to logs if console is enabled
+        if (enabled) {
+            addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'error');
+        }
     };
 
     console.warn = function(...args) {
         originalWarn.apply(console, args);
-        addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'warn');
+        // Only add to logs if console is enabled
+        if (enabled) {
+            addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'warn');
+        }
     };
 
     let lastToggleTime = 0;
@@ -205,15 +167,14 @@
     window.toggleDebugConsole = function() {
         const now = Date.now();
         if (now - lastToggleTime < 500) {
-            console.log('[Console] Toggle ignored (debounced)');
             return;
         }
         lastToggleTime = now;
         
-        enabled = !enabled;
+        consoleVisible = !consoleVisible;
         if (consoleDiv) {
-            consoleDiv.style.display = enabled ? 'block' : 'none';
-            if (enabled) {
+            consoleDiv.style.display = consoleVisible ? 'block' : 'none';
+            if (consoleVisible) {
                 window.consoleAutoScroll = true;
                 updateBorder();
                 consoleDiv.scrollTop = 0;
@@ -237,9 +198,10 @@
             const newEnabled = config.enableDebugConsole !== false;
             if (newEnabled !== enabled) {
                 enabled = newEnabled;
+                consoleVisible = newEnabled;
                 if (consoleDiv) {
-                    consoleDiv.style.display = enabled ? 'block' : 'none';
-                    if (enabled) {
+                    consoleDiv.style.display = consoleVisible ? 'block' : 'none';
+                    if (consoleVisible) {
                         window.consoleAutoScroll = true;
                         updateBorder();
                         consoleDiv.scrollTop = 0;
@@ -261,6 +223,9 @@
     }, 500);
 
     function addLog(message, type = 'log') {
+        // Don't process logs if console is disabled
+        if (!enabled) return;
+        
         const color = type === 'error' ? '#f00' : type === 'warn' ? '#ff0' : '#0f0';
         const timestamp = new Date().toLocaleTimeString();
         const logEntry = `<div style="color:${color};margin-bottom:5px;word-wrap:break-word;white-space:pre-wrap;">[${timestamp}] ${message}</div>`;
@@ -268,7 +233,8 @@
         logs.unshift(logEntry);
         if (logs.length > 150) logs.pop();
         
-        if (consoleDiv && enabled) {
+        // Only update DOM if console is visible
+        if (consoleDiv && consoleVisible) {
             consoleDiv.innerHTML = logs.join('');
             if (window.consoleAutoScroll) {
                 consoleDiv.scrollTop = 0;
@@ -277,7 +243,6 @@
     }
 
     // USB Detection code stays the same...
-    
     function getUSBMonitoringEnabled() {
         try {
             const config = JSON.parse(window.localStorage[CONFIG_KEY] || '{}');
@@ -347,7 +312,7 @@
     };
     
     console.log('[Console] ========================================');
-    console.log('[Console] Visual Console v150 - NEWEST FIRST');
+    console.log('[Console] Visual Console v160 - NEWEST FIRST');
     console.log('[Console] ========================================');
     console.log('[Console] ⚡ NEWEST LOGS AT TOP (scroll down for older)');
     console.log('[Console] Remote Controls:');
