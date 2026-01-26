@@ -354,6 +354,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
           
           if (!shortsEnabled) {
             if (shelve.shelfRenderer.tvhtml5ShelfRendererType === 'TVHTML5_SHELF_RENDERER_TYPE_SHORTS') {
+              console.log('[SHELF_PROCESS] Removing entire SHORTS shelf');
               shelves.splice(i, 1);
               shelvesRemoved++;
               totalShortsRemoved += itemsBefore;
@@ -373,6 +374,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
           shelve.shelfRenderer.content.horizontalListRenderer.items = items;
           
           if (items.length === 0) {
+            console.log('[SHELF_PROCESS] Shelf now empty, removing');
             shelves.splice(i, 1);
             shelvesRemoved++;
             continue;
@@ -404,6 +406,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
           shelve.shelfRenderer.content.gridRenderer.items = items;
           
           if (items.length === 0) {
+            console.log('[SHELF_PROCESS] Shelf now empty, removing');
             shelves.splice(i, 1);
             shelvesRemoved++;
             continue;
@@ -435,6 +438,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
           shelve.shelfRenderer.content.verticalListRenderer.items = items;
           
           if (items.length === 0) {
+            console.log('[SHELF_PROCESS] Shelf now empty, removing');
             shelves.splice(i, 1);
             shelvesRemoved++;
             continue;
@@ -482,6 +486,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
           const contents = innerShelf?.content?.richGridRenderer?.contents;
           
           if (Array.isArray(contents) && contents.some(item => isShortItem(item))) {
+            console.log('[SHELF_PROCESS] Removing shorts richSection shelf');
             shelves.splice(i, 1);
             shelvesRemoved++;
             continue;
@@ -514,6 +519,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
         shelve.gridRenderer.items = items;
         
         if (items.length === 0) {
+          console.log('[SHELF_PROCESS] Shelf now empty, removing');
           shelves.splice(i, 1);
           shelvesRemoved++;
           continue;
@@ -657,6 +663,12 @@ function hideVideo(items) {
     const percentWatched = Number(progressBar.percentDurationWatched || 0);
     if (percentWatched > threshold) {
       hiddenCount++;
+      const videoId = item.tileRenderer?.contentId || 
+                     item.videoRenderer?.videoId || 
+                     item.richItemRenderer?.content?.videoRenderer?.videoId || 
+                     'unknown';
+      
+      console.log('[HIDE] Hiding:', videoId, '(' + percentWatched + '% watched)');
       return false;
     }
     
