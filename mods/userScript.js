@@ -171,7 +171,19 @@
         }
         lastToggleTime = now;
         
-        consoleVisible = !consoleVisible;
+        // Toggle and update config
+        enabled = !enabled;
+        consoleVisible = enabled;
+        
+        // Update localStorage
+        try {
+            const config = JSON.parse(window.localStorage[CONFIG_KEY] || '{}');
+            config.enableDebugConsole = enabled;
+            window.localStorage[CONFIG_KEY] = JSON.stringify(config);
+        } catch (e) {
+            console.error('[Console] Failed to save config:', e);
+        }
+        
         if (consoleDiv) {
             consoleDiv.style.display = consoleVisible ? 'block' : 'none';
             if (consoleVisible) {
@@ -312,7 +324,7 @@
     };
     
     console.log('[Console] ========================================');
-    console.log('[Console] Visual Console v170 - NEWEST FIRST');
+    console.log('[Console] Visual Console v180 - NEWEST FIRST');
     console.log('[Console] ========================================');
     console.log('[Console] ⚡ NEWEST LOGS AT TOP (scroll down for older)');
     console.log('[Console] Remote Controls:');

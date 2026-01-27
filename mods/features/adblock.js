@@ -358,6 +358,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
               shelves.splice(i, 1);
               shelvesRemoved++;
               totalShortsRemoved += itemsBefore;
+              totalItemsBefore += itemsBefore;
               continue;
             }
             
@@ -661,7 +662,8 @@ function hideVideo(items) {
     if (!progressBar) return true;
     
     const percentWatched = Number(progressBar.percentDurationWatched || 0);
-    if (percentWatched > threshold) {
+    // FIXED: Use >= instead of > to catch 100% watched videos
+    if (percentWatched >= threshold) {
       hiddenCount++;
       const videoId = item.tileRenderer?.contentId || 
                      item.videoRenderer?.videoId || 
