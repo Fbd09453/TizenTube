@@ -253,9 +253,15 @@ function isShortItem(item) {
 
   const detectionReasons = [];
 
-  // Check all possible renderer paths
+  // Check for reel renderers
   if (item.reelItemRenderer || item.richItemRenderer?.content?.reelItemRenderer) {
     detectionReasons.push('reelRenderer');
+  }
+
+  // NEW: Check contentType for Tizen 5.0
+  if (item.tileRenderer?.contentType === 'TILE_CONTENT_TYPE_SHORT' ||
+      item.tileRenderer?.contentType === 'TILE_CONTENT_TYPE_REEL') {
+    detectionReasons.push('contentType');
   }
 
   const videoRenderers = [
@@ -263,65 +269,57 @@ function isShortItem(item) {
     item.compactVideoRenderer,
     item.gridVideoRenderer,
     item.richItemRenderer?.content?.videoRenderer,
-    item.tileRenderer,
-    // NEW: Additional paths for Tizen 5.0
-    item.gridChannelRenderer,
-    item.channelRenderer
+    item.tileRenderer
   ];
 
   for (const video of videoRenderers) {
     if (!video) continue;
 
-    // Check badges (works on both versions)
+    // Check badges
     if (video.badges) {
       for (const badge of video.badges) {
-        if (badge.metadataBadgeRenderer?.label === 'Shorts' || 
-            badge.metadataBadgeRenderer?.label === 'Short') {
+        const label = badge.metadataBadgeRenderer?.label || '';
+        if (label === 'Shorts' || label === 'Short' || label === 'SHORTS') {
           detectionReasons.push('badge');
           break;
         }
       }
     }
 
-    // Check overlays (enhanced for Tizen 5.0)
+    // Check overlays
     if (video.thumbnailOverlays) {
       for (const overlay of video.thumbnailOverlays) {
-        if (overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS' ||
-            overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORT') {
+        const style = overlay.thumbnailOverlayTimeStatusRenderer?.style || '';
+        if (style === 'SHORTS' || style === 'SHORT') {
           detectionReasons.push('overlay');
           break;
         }
       }
     }
 
-    // Check navigation endpoint (multiple paths for compatibility)
+    // Check navigation endpoint
     const navEndpoint = video.navigationEndpoint || 
                        video.onSelectCommand ||
-                       video.command?.commandMetadata;
+                       video.command;
     
+    // Multiple URL path checks
     const url = navEndpoint?.commandMetadata?.webCommandMetadata?.url || 
                 navEndpoint?.watchEndpoint?.videoId ||
-                navEndpoint?.webCommandMetadata?.url;
+                navEndpoint?.webCommandMetadata?.url ||
+                '';
     
-    if (url && typeof url === 'string' && 
-        (url.includes('/shorts/') || url.includes('/short/'))) {
-      detectionReasons.push('url');
+    if (url && typeof url === 'string') {
+      if (url.includes('/shorts/') || 
+          url.includes('/short/') ||
+          url.includes('shorts?')) {
+        detectionReasons.push('url');
+      }
     }
     
-    // NEW: Check for shorts-specific metadata (Tizen 5.0)
-    if (video.videoId && video.lengthSeconds) {
-      const length = parseInt(video.lengthSeconds, 10);
-      // Shorts are typically under 60 seconds
-      if (length <= 60 && length > 0) {
-        // Additional check: aspect ratio or other metadata
-        if (video.thumbnail?.thumbnails?.[0]) {
-          const thumb = video.thumbnail.thumbnails[0];
-          // Shorts often have 9:16 aspect ratio
-          if (thumb.height > thumb.width) {
-            detectionReasons.push('aspect-ratio');
-          }
-        }
-      }
+    // NEW: Check for reelWatchEndpoint (Tizen 5.0 specific)
+    if (navEndpoint?.reelWatchEndpoint || 
+        navEndpoint?.watchEndpoint?.playerParams?.includes('shorts')) {
+      detectionReasons.push('reelEndpoint');
     }
   }
 
@@ -653,8 +651,9 @@ function deArrowify(items) {
 function hqify(items) {
   for (const item of items) {
     if (!item.tileRenderer) continue;
-    if (item.tileRenderer.style !== 'TILE_STYLE_YTLR_DEFAULT') continue;
+    //if (item.tileRenderer.style !== 'TILE_STYLE_YTLR_DEFAULT') continue;
     if (configRead('enableHqThumbnails')) {
+      if (!item.tileRenderer.onSelectCommand?.watchEndpoint?.videoId) continue;
       const videoID = item.tileRenderer.onSelectCommand.watchEndpoint.videoId;
       const queryArgs = item.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails[0].url.split('?')[1];
       item.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails = [
@@ -671,7 +670,12 @@ function hqify(items) {
 function addLongPress(items) {
   for (const item of items) {
     if (!item.tileRenderer) continue;
-    if (item.tileRenderer.style !== 'TILE_STYLE_YTLR_DEFAULT') continue;
+    //if (item.tileRenderer.style !== 'TILE_STYLE_YTLR_DEFAULT') continue;
+    // Skip non-video tiles (channels, playlists, etc)
+    if (item.tileRenderer.contentType && 
+        item.tileRenderer.contentType !== 'TILE_CONTENT_TYPE_VIDEO') {
+      continue;
+    }
     if (item.tileRenderer.onLongPressCommand) {
       item.tileRenderer.onLongPressCommand.showMenuCommand.menu.menuRenderer.items.push(MenuServiceItemRenderer('Add to Queue', {
         clickTrackingParams: null,
@@ -714,11 +718,16 @@ function hideVideo(items) {
   const filtered = items.filter(item => {
     if (!item) return false;
     
+    // NEW: Skip non-video items (navigation, channels, etc)
+    if (item.tileRenderer?.contentType && 
+        item.tileRenderer.contentType !== 'TILE_CONTENT_TYPE_VIDEO') {
+      return true; // Keep navigation items
+    }
+    
     const progressBar = findProgressBar(item);
     if (!progressBar) return true;
     
     const percentWatched = Number(progressBar.percentDurationWatched || 0);
-    // FIXED: Use >= instead of > to catch 100% watched videos
     if (percentWatched >= threshold) {
       hiddenCount++;
       const videoId = item.tileRenderer?.contentId || 
@@ -742,33 +751,40 @@ function findProgressBar(item) {
   const checkRenderer = (renderer) => {
     if (!renderer) return null;
     
-    // MORE COMPREHENSIVE overlay paths for Tizen 5.0 compatibility
+    // Comprehensive overlay paths
     const overlayPaths = [
+      // Standard paths (Tizen 6.5)
       renderer.thumbnailOverlays,
       renderer.header?.tileHeaderRenderer?.thumbnailOverlays,
       renderer.thumbnail?.thumbnailOverlays,
-      // NEW: Additional paths for older Tizen versions
+      
+      // Alternative paths (Tizen 5.0)
       renderer.thumbnailOverlayRenderer,
-      renderer.overlay?.thumbnailOverlayResumePlaybackRenderer
+      renderer.overlay,
+      renderer.overlays
     ];
     
     for (const overlays of overlayPaths) {
       if (!overlays) continue;
       
-      // Handle both array and single object
+      // Handle array
       if (Array.isArray(overlays)) {
-        const progressOverlay = overlays.find(o => o?.thumbnailOverlayResumePlaybackRenderer);
+        const progressOverlay = overlays.find(o => 
+          o?.thumbnailOverlayResumePlaybackRenderer
+        );
         if (progressOverlay) {
           return progressOverlay.thumbnailOverlayResumePlaybackRenderer;
         }
-      } else if (overlays.thumbnailOverlayResumePlaybackRenderer) {
+      } 
+      // Handle direct object
+      else if (overlays.thumbnailOverlayResumePlaybackRenderer) {
         return overlays.thumbnailOverlayResumePlaybackRenderer;
       }
     }
     return null;
   };
   
-  // MORE COMPREHENSIVE renderer types for Tizen 5.0
+  // Check all renderer types
   const rendererTypes = [
     item.tileRenderer,
     item.playlistVideoRenderer,
@@ -776,11 +792,7 @@ function findProgressBar(item) {
     item.gridVideoRenderer,
     item.videoRenderer,
     item.richItemRenderer?.content?.videoRenderer,
-    item.richItemRenderer?.content?.reelItemRenderer,
-    // NEW: Additional renderer types for older Tizen
-    item.gridChannelRenderer,
-    item.channelRenderer,
-    item.playlistRenderer
+    item.richItemRenderer?.content?.reelItemRenderer
   ];
   
   for (const renderer of rendererTypes) {
