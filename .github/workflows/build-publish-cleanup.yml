@@ -421,7 +421,11 @@ jobs:
           URLS+="${GH_BASE}@main/dist/userScript.js,"
           URLS+="${GH_BASE}@main/dist/service.js,"
           
-          # Purge entire repo (all branches/tags)
+          URLS+="${GH_BASE}/package.json,"
+          URLS+="${GH_BASE}/dist/userScript.js,"
+          URLS+="${GH_BASE}/dist/service.js,"
+          
+          # Purge entire repo (all branches/tags) DOENST WORK
           URLS+="${GH_BASE}@*"
           
           echo "urls=${URLS}" >> $GITHUB_OUTPUT
