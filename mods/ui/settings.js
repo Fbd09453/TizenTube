@@ -447,20 +447,32 @@ export default function modernUI(update, parameters) {
                                     value: 'library'
                                 },
                                 {
+                                    name: 'Playlists Page',
+                                    icon: 'PLAYLIST_PLAY',
+                                    value: 'playlists'
+                                },
+                                {
+                                    name: 'Individual Playlists (WL, LL, etc)',
+                                    icon: 'PLAYLIST_PLAY',
+                                    value: 'playlist'
+                                },
+                                {
+                                    name: 'History',
+                                    icon: 'HISTORY',
+                                    value: 'history'
+                                },
+                                {
+                                    name: 'Trending',
+                                    icon: 'TRENDING',
+                                    value: 'trending'
+                                },
+                                {
                                     name: 'More',
                                     value: 'more'
                                 },
                                 {
                                     name: 'Watch',
                                     value: 'watch'
-                                },
-                                {
-                                    name: 'Trending',
-                                    value: 'trending'
-                                },
-                                {
-                                    name: 'History',
-                                    value: 'history'
                                 },
                                 {
                                     name: 'Other/Unknown Pages',

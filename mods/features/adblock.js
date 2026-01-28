@@ -53,7 +53,11 @@ JSON.parse = function () {
     // ONLY process once per unique response object
     if (!r.__tizentubeProcessedBrowse) {
       r.__tizentubeProcessedBrowse = true;
-      console.log('[JSON.parse] tvBrowseRenderer detected, page:', currentPage);
+      console.log('[BROWSE] ==============tvBrowseRenderer============');
+      console.log('[BROWSE] Page:', currentPage);
+      console.log('[BROWSE] URL:', window.location.href);
+      console.log('[BROWSE] Hash:', window.location.hash);
+      console.log('[BROWSE] ========================================');
       
       if (adBlockEnabled) {
         const beforeAds = r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.length;
@@ -125,6 +129,15 @@ JSON.parse = function () {
   if (r?.continuationContents?.sectionListContinuation?.contents) {
     const page = getCurrentPage();
     console.log('[CONTINUATION]', page, '- Processing', r.continuationContents.sectionListContinuation.contents.length, 'shelves');
+
+    if (window._lastLoggedPage !== page) {
+      console.log('[PAGE_DEBUG] ========================================');
+      console.log('[PAGE_DEBUG] Page changed to:', page);
+      console.log('[PAGE_DEBUG] URL:', window.location.href);
+      console.log('[PAGE_DEBUG] Hash:', window.location.hash);
+      console.log('[PAGE_DEBUG] ========================================');
+      window._lastLoggedPage = page;
+    }
     
     // This is where individual channel content loads!
     processShelves(r.continuationContents.sectionListContinuation.contents);
@@ -216,6 +229,80 @@ JSON.parse = function () {
         });
       }
       console.log('[PLAYLIST] ========================================');
+  }
+  
+  // Handle twoColumnBrowseResultsRenderer (playlist pages like WL, LL)
+  if (r?.contents?.twoColumnBrowseResultsRenderer?.tabs) {
+      const page = getCurrentPage();
+      const debugEnabled = configRead('enableDebugConsole');
+      
+      if (debugEnabled) {
+          console.log('[PLAYLIST_PAGE] Detected tabs on page:', page);
+
+          if (window._lastLoggedPage !== page) {
+            console.log('[PAGE_DEBUG] ========================================');
+            console.log('[PAGE_DEBUG] Page changed to:', page);
+            console.log('[PAGE_DEBUG] URL:', window.location.href);
+            console.log('[PAGE_DEBUG] Hash:', window.location.hash);
+            console.log('[PAGE_DEBUG] ========================================');
+            window._lastLoggedPage = page;
+          }
+      }
+      
+      const tabs = r.contents.twoColumnBrowseResultsRenderer.tabs;
+      tabs.forEach((tab, idx) => {
+          if (tab.tabRenderer?.content?.sectionListRenderer?.contents) {
+              if (debugEnabled) {
+                  console.log(`[PLAYLIST_PAGE] Tab ${idx} - processing shelves`);
+              }
+              processShelves(tab.tabRenderer.content.sectionListRenderer.contents);
+          }
+          
+          // Handle richGridRenderer in playlists
+          if (tab.tabRenderer?.content?.richGridRenderer?.contents) {
+              if (debugEnabled) {
+                  console.log(`[PLAYLIST_PAGE] Tab ${idx} - processing richGrid`);
+              }
+              
+              const contents = tab.tabRenderer.content.richGridRenderer.contents;
+              const beforeCount = contents.length;
+              const filtered = hideVideo(contents);
+              
+              if (debugEnabled && beforeCount !== filtered.length) {
+                  console.log(`[PLAYLIST_PAGE] Tab ${idx} filtered:`, beforeCount, '→', filtered.length);
+              }
+              
+              tab.tabRenderer.content.richGridRenderer.contents = filtered;
+          }
+      });
+  }
+
+  // Handle singleColumnBrowseResultsRenderer (alternative playlist format)
+  if (r?.contents?.singleColumnBrowseResultsRenderer?.tabs) {
+      const page = getCurrentPage();
+      const debugEnabled = configRead('enableDebugConsole');
+      
+      if (debugEnabled) {
+          console.log('[PLAYLIST_SINGLE] Detected single column on page:', page);
+          if (window._lastLoggedPage !== page) {
+            console.log('[PAGE_DEBUG] ========================================');
+            console.log('[PAGE_DEBUG] Page changed to:', page);
+            console.log('[PAGE_DEBUG] URL:', window.location.href);
+            console.log('[PAGE_DEBUG] Hash:', window.location.hash);
+            console.log('[PAGE_DEBUG] ========================================');
+            window._lastLoggedPage = page;
+          }
+      }
+      
+      const tabs = r.contents.singleColumnBrowseResultsRenderer.tabs;
+      tabs.forEach((tab, idx) => {
+          if (tab.tabRenderer?.content?.sectionListRenderer?.contents) {
+              if (debugEnabled) {
+                  console.log(`[PLAYLIST_SINGLE] Tab ${idx} - processing shelves`);
+              }
+              processShelves(tab.tabRenderer.content.sectionListRenderer.contents);
+          }
+      });
   }
 
   if (r?.contents?.singleColumnWatchNextResults?.pivot?.sectionListRenderer) {
@@ -397,6 +484,15 @@ function processShelves(shelves, shouldAddPreviews = true) {
   const shouldHideWatched = hideWatchedEnabled && (configPages.length === 0 || configPages.includes(page));
   
   console.log('[SHELF] Page:', page, '| Shelves:', shelves.length, '| Hide:', shouldHideWatched, '| Shorts:', shortsEnabled);
+
+  if (window._lastLoggedPage !== page) {
+    console.log('[PAGE_DEBUG] ========================================');
+    console.log('[PAGE_DEBUG] Page changed to:', page);
+    console.log('[PAGE_DEBUG] URL:', window.location.href);
+    console.log('[PAGE_DEBUG] Hash:', window.location.hash);
+    console.log('[PAGE_DEBUG] ========================================');
+    window._lastLoggedPage = page;
+  }
   
   let totalItemsBefore = 0;
   let totalItemsAfter = 0;
@@ -783,20 +879,46 @@ function hideVideo(items) {
   const page = getCurrentPage();
   const configPages = configRead('hideWatchedVideosPages') || [];
   const threshold = Number(configRead('hideWatchedVideosThreshold') || 0);
-  const shouldHideOnThisPage = configPages.length === 0 || configPages.includes(page);
+
+  if (window._lastLoggedPage !== page) {
+    console.log('[PAGE_DEBUG] ========================================');
+    console.log('[PAGE_DEBUG] Page changed to:', page);
+    console.log('[PAGE_DEBUG] URL:', window.location.href);
+    console.log('[PAGE_DEBUG] Hash:', window.location.hash);
+    console.log('[PAGE_DEBUG] ========================================');
+    window._lastLoggedPage = page;
+  }
   
-  if (!shouldHideOnThisPage) return items;
-  if (page === 'playlist' && !configRead('enableHideWatchedInPlaylists')) return items;
+  // Special handling for playlists
+  if (page === 'playlist' || page === 'playlists') {
+    if (!configRead('enableHideWatchedInPlaylists')) {
+      console.log('[HIDE] Playlist filtering disabled by config');
+      return items;
+    }
+    console.log('[HIDE] Filtering playlist page (config enabled)');
+  }
+  
+  // Check if this page should be filtered
+  const shouldHideOnThisPage = configPages.length === 0 || 
+                                configPages.includes(page) ||
+                                (page === 'playlist' && configRead('enableHideWatchedInPlaylists'));
+  
+  if (!shouldHideOnThisPage) {
+    console.log('[HIDE] Page', page, 'not in filter list');
+    return items;
+  }
+  
+  console.log('[HIDE] Filtering page:', page, 'threshold:', threshold + '%');
   
   let hiddenCount = 0;
   
   const filtered = items.filter(item => {
     if (!item) return false;
     
-    // NEW: Skip non-video items (navigation, channels, etc)
+    // Skip non-video items
     if (item.tileRenderer?.contentType && 
         item.tileRenderer.contentType !== 'TILE_CONTENT_TYPE_VIDEO') {
-      return true; // Keep navigation items
+      return true;
     }
     
     const progressBar = findProgressBar(item);
@@ -807,15 +929,18 @@ function hideVideo(items) {
       hiddenCount++;
       const videoId = item.tileRenderer?.contentId || 
                      item.videoRenderer?.videoId || 
-                     item.richItemRenderer?.content?.videoRenderer?.videoId || 
                      'unknown';
       
-      console.log('[HIDE] Hiding:', videoId, '(' + percentWatched + '% watched)');
+      console.log('[HIDE] Hiding:', videoId, '(' + percentWatched + '%)');
       return false;
     }
     
     return true;
   });
+  
+  if (hiddenCount > 0) {
+    console.log('[HIDE] Total hidden:', hiddenCount, 'videos on page:', page);
+  }
   
   return filtered;
 }
@@ -888,32 +1013,38 @@ function getCurrentPage() {
   const search = location.search || '';
   const href = location.href || '';
   
-  // Clean up the hash - KEEP the C= parameter for browse detection
-  const cleanHash = hash.split('?additionalDataUrl')[0]; // Only remove additionalDataUrl
+  const cleanHash = hash.split('?additionalDataUrl')[0];
   
-  // Extract browse parameters from hash (Tizen YouTube format: /browse?C=FEsubscriptions)
+  // Extract browse parameters
   let browseParam = '';
   const cMatch = hash.match(/[?&]C=([^&]+)/i);
   if (cMatch) {
-    browseParam = cMatch[1].toLowerCase(); // Store lowercase for comparison
+    browseParam = cMatch[1].toLowerCase();
   }
   
-  // Also check for path-based browse IDs in the hash
   const browseIdMatch = hash.match(/\/browse\/([^?&#]+)/i);
   if (browseIdMatch) {
     const browseId = browseIdMatch[1].toLowerCase();
     if (!browseParam) browseParam = browseId;
   }
   
-  // Combine for detection
   const combined = (cleanHash + ' ' + path + ' ' + search + ' ' + href + ' ' + browseParam).toLowerCase();
-  const fullUrl = `${path}${hash.split('?additionalDataUrl')[0]}`;
   
-  // Detect page type - check browse parameters FIRST
   let detectedPage = 'other';
   
-  // CRITICAL: Check browse parameters first (most reliable for Tizen)
-  if (browseParam.includes('fesubscription') || browseParam.includes('subscriptions')) {
+  // ⭐ NEW: Check /feed/ pages FIRST (before browse params)
+  if (cleanHash.includes('/feed/history') || combined.includes('/feed/history')) {
+    detectedPage = 'history';
+  } else if (cleanHash.includes('/feed/trending') || combined.includes('/feed/trending')) {
+    detectedPage = 'trending';
+  } else if (cleanHash.includes('/feed/playlists') || combined.includes('/feed/playlists')) {
+    detectedPage = 'playlists';
+  } else if (cleanHash.includes('/feed/library') || cleanHash.includes('/library')) {
+    detectedPage = 'library';
+  }
+  
+  // Check browse parameters
+  else if (browseParam.includes('fesubscription') || browseParam.includes('subscriptions')) {
     detectedPage = 'subscriptions';
   } else if (browseParam.includes('felibrary')) {
     detectedPage = 'library';
@@ -925,52 +1056,42 @@ function getCurrentPage() {
     detectedPage = 'gaming';
   } else if (browseParam.includes('fetopics')) {
     detectedPage = 'home';
-  }
-  // Check if it's a channel based on browse parameter starting with UC (YouTube channel IDs)
-  else if (browseParam.startsWith('uc') && browseParam.length > 10) {
+  } else if (browseParam.startsWith('uc') && browseParam.length > 10) {
     detectedPage = 'channel';
   }
-  // Check traditional hash patterns (fallback)
-  else if (cleanHash.includes('/feed/subscriptions') || cleanHash.includes('/subscriptions') || cleanHash.includes('/abos')) {
+  
+  // Check traditional patterns
+  else if (cleanHash.includes('/feed/subscriptions') || cleanHash.includes('/subscriptions')) {
     detectedPage = 'subscriptions';
-  } else if (cleanHash.includes('/feed/library') || cleanHash.includes('/library')) {
-    detectedPage = 'library';
   } else if (cleanHash.includes('/playlist') || combined.includes('list=')) {
     detectedPage = 'playlist';
-  } else if (cleanHash.includes('/results') || cleanHash.includes('/search') || combined.includes('search_query=')) {
+  } else if (cleanHash.includes('/results') || cleanHash.includes('/search')) {
     detectedPage = 'search';
   } else if (cleanHash.includes('/watch')) {
     detectedPage = 'watch';
-  } else if (cleanHash.includes('/@') || cleanHash.includes('/channel/') || cleanHash.includes('/c/') || cleanHash.includes('/user/')) {
+  } else if (cleanHash.includes('/@') || cleanHash.includes('/channel/')) {
     detectedPage = 'channel';
   } else if (cleanHash.includes('/browse') && !browseParam) {
-    // Generic browse without specific C parameter
     detectedPage = 'home';
-  } else if (cleanHash === '' || cleanHash === '/' || cleanHash.includes('home')) {
+  } else if (cleanHash === '' || cleanHash === '/') {
     detectedPage = 'home';
   }
   
-  // Log page changes COMPACTLY - ONLY WHEN ACTUALLY CHANGED
-  const currentFullUrl = fullUrl;
-  if (detectedPage !== lastDetectedPage || currentFullUrl !== lastFullUrl) {
-    // Only log if debug console is enabled
+  // Logging
+  const fullUrl = location.href;
+  const lastDetectedPage = window._lastDetectedPage;
+  const lastFullUrl = window._lastFullUrl;
+  
+  if (detectedPage !== lastDetectedPage || fullUrl !== lastFullUrl) {
     const debugEnabled = configRead('enableDebugConsole');
     if (debugEnabled) {
       console.log(`[PAGE] ${lastDetectedPage||'initial'} → ${detectedPage}`);
-      console.log(`[PAGE] URL: ${location.href}`);
-      console.log(`[PAGE] Hash: "${cleanHash}" | C: "${browseParam || 'none'}"`);
-      
-      const hideWatchedEnabled = configRead('enableHideWatchedVideos');
-      const configPages = configRead('hideWatchedVideosPages') || [];
-      const shouldHideWatched = hideWatchedEnabled && (configPages.length === 0 || configPages.includes(detectedPage));
-      const threshold = configRead('hideWatchedVideosThreshold');
-      
-      console.log(`[PAGE] HideWatched: ${shouldHideWatched ? 'YES' : 'NO'} | Enabled:${hideWatchedEnabled} | InConfigPages:${configPages.includes(detectedPage)} | Threshold:${threshold}%`);
-      console.log(`[PAGE] ConfigPages: [${configPages.join(', ')}]`);
+      console.log(`[PAGE] Hash: "${cleanHash}"`);
+      if (browseParam) console.log(`[PAGE] Browse param: "${browseParam}"`);
     }
     
-    lastDetectedPage = detectedPage;
-    lastFullUrl = currentFullUrl;
+    window._lastDetectedPage = detectedPage;
+    window._lastFullUrl = fullUrl;
   }
   
   return detectedPage;
