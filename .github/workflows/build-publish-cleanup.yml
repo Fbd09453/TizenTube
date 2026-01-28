@@ -421,6 +421,11 @@ jobs:
           URLS+="${GH_BASE}@main/dist/userScript.js,"
           URLS+="${GH_BASE}@main/dist/service.js,"
           
+          # GitHub repo URLs - master branch
+          URLS+="${GH_BASE}@master/package.json,"
+          URLS+="${GH_BASE}@master/dist/userScript.js,"
+          URLS+="${GH_BASE}@master/dist/service.js,"
+          
           URLS+="${GH_BASE}/package.json,"
           URLS+="${GH_BASE}/dist/userScript.js,"
           URLS+="${GH_BASE}/dist/service.js,"
