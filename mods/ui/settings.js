@@ -795,9 +795,9 @@ export default function modernUI(update, parameters) {
                                 value: '1054'
                             },
                             {
-                                name: 'Full Screen (1056px)',
+                                name: 'Full Screen (1055px)',
                                 key: 'debugConsoleHeight',
-                                value: '1056'
+                                value: '1055'
                             }
                         ]
                     },

@@ -142,6 +142,26 @@ JSON.parse = function () {
     // This is where individual channel content loads!
     processShelves(r.continuationContents.sectionListContinuation.contents);
   }
+  
+  // ⭐ PATCH 5: Handle onResponseReceivedActions (lazy-loaded channel tabs)
+  if (r?.onResponseReceivedActions) {
+    const debugEnabled = configRead('enableDebugConsole');
+    const page = getCurrentPage();
+    
+    r.onResponseReceivedActions.forEach((action, actionIndex) => {
+      if (action.appendContinuationItemsAction?.continuationItems) {
+        if (debugEnabled) {
+          console.log('[CONTINUATION] ========================================');
+          console.log('[CONTINUATION] Page:', page);
+          console.log('[CONTINUATION] Action', actionIndex, '- Processing items');
+          console.log('[CONTINUATION] ========================================');
+        }
+        
+        const items = action.appendContinuationItemsAction.continuationItems;
+        processShelves(items);
+      }
+    });
+  }
 
   if (r?.continuationContents?.horizontalListContinuation?.items) {
     console.log('SHELF_ENTRY', 'Processing horizontal list continuation', {
@@ -381,93 +401,57 @@ for (const key in window._yttv) {
 
 function isShortItem(item) {
   if (!item) return false;
-
-  const detectionReasons = [];
-
-  // Check for reel renderers
-  if (item.reelItemRenderer || item.richItemRenderer?.content?.reelItemRenderer) {
-    detectionReasons.push('reelRenderer');
-  }
-
-  // NEW: Check contentType for Tizen 5.0
-  if (item.tileRenderer?.contentType === 'TILE_CONTENT_TYPE_SHORT' ||
-      item.tileRenderer?.contentType === 'TILE_CONTENT_TYPE_REEL') {
-    detectionReasons.push('contentType');
-  }
-
-  const videoRenderers = [
-    item.videoRenderer,
-    item.compactVideoRenderer,
-    item.gridVideoRenderer,
-    item.richItemRenderer?.content?.videoRenderer,
-    item.tileRenderer
-  ];
-
-  for (const video of videoRenderers) {
-    if (!video) continue;
-
-    // Check badges
-    if (video.badges) {
-      for (const badge of video.badges) {
-        const label = badge.metadataBadgeRenderer?.label || '';
-        if (label === 'Shorts' || label === 'Short' || label === 'SHORTS') {
-          detectionReasons.push('badge');
-          break;
-        }
-      }
-    }
-
-    // Check overlays
-    if (video.thumbnailOverlays) {
-      for (const overlay of video.thumbnailOverlays) {
-        const style = overlay.thumbnailOverlayTimeStatusRenderer?.style || '';
-        if (style === 'SHORTS' || style === 'SHORT') {
-          detectionReasons.push('overlay');
-          break;
-        }
-      }
-    }
-
-    // Check navigation endpoint
-    const navEndpoint = video.navigationEndpoint || 
-                       video.onSelectCommand ||
-                       video.command;
-    
-    // Multiple URL path checks
-    const url = navEndpoint?.commandMetadata?.webCommandMetadata?.url || 
-                navEndpoint?.watchEndpoint?.videoId ||
-                navEndpoint?.webCommandMetadata?.url ||
-                '';
-    
-    if (url && typeof url === 'string') {
-      if (url.includes('/shorts/') || 
-          url.includes('/short/') ||
-          url.includes('shorts?')) {
-        detectionReasons.push('url');
-      }
-    }
-    
-    // NEW: Check for reelWatchEndpoint (Tizen 5.0 specific)
-    if (navEndpoint?.reelWatchEndpoint || 
-        navEndpoint?.watchEndpoint?.playerParams?.includes('shorts')) {
-      detectionReasons.push('reelEndpoint');
-    }
-  }
-
-  const isShort = detectionReasons.length > 0;
   
-  if (isShort) {
-    const videoId = item.tileRenderer?.contentId || 
-                   item.videoRenderer?.videoId || 
-                   item.richItemRenderer?.content?.videoRenderer?.videoId || 
-                   'unknown';
-    console.log('SHORT_DETECTED', `Short video detected: ${videoId}`, {
-      reasons: detectionReasons,
-      page: getCurrentPage()
-    });
+  // Method 1: Check tileRenderer contentType
+  if (item.tileRenderer?.contentType === 'TILE_CONTENT_TYPE_SHORT') {
+    return true;
   }
-
-  return isShort;
+  
+  // Method 2: Check videoRenderer for shorts
+  if (item.videoRenderer) {
+    // Check thumbnail overlays for shorts badge
+    if (item.videoRenderer.thumbnailOverlays) {
+      const hasShortsBadge = item.videoRenderer.thumbnailOverlays.some(overlay => 
+        overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS' ||
+        overlay.thumbnailOverlayTimeStatusRenderer?.text?.simpleText === 'SHORTS'
+      );
+      if (hasShortsBadge) return true;
+    }
+    
+    // Check navigation endpoint for shorts
+    const navEndpoint = item.videoRenderer.navigationEndpoint;
+    if (navEndpoint?.reelWatchEndpoint || 
+        navEndpoint?.commandMetadata?.webCommandMetadata?.url?.includes('/shorts/')) {
+      return true;
+    }
+  }
+  
+  // Method 3: Check richItemRenderer for shorts (newer format)
+  if (item.richItemRenderer?.content?.reelItemRenderer) {
+    return true;
+  }
+  
+  // Method 4: Check gridVideoRenderer
+  if (item.gridVideoRenderer) {
+    if (item.gridVideoRenderer.thumbnailOverlays) {
+      const hasShortsBadge = item.gridVideoRenderer.thumbnailOverlays.some(overlay =>
+        overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS'
+      );
+      if (hasShortsBadge) return true;
+    }
+  }
+  
+  // Method 5: Check compactVideoRenderer
+  if (item.compactVideoRenderer) {
+    if (item.compactVideoRenderer.thumbnailOverlays) {
+      const hasShortsBadge = item.compactVideoRenderer.thumbnailOverlays.some(overlay =>
+        overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS'
+      );
+      if (hasShortsBadge) return true;
+    }
+  }
+  
+  return false;
 }
 
 function processShelves(shelves, shouldAddPreviews = true) {
@@ -1017,7 +1001,7 @@ function getCurrentPage() {
   
   // Extract browse parameters
   let browseParam = '';
-  const cMatch = hash.match(/[?&]C=([^&]+)/i);
+  const cMatch = hash.match(/[?&]c=([^&]+)/i);
   if (cMatch) {
     browseParam = cMatch[1].toLowerCase();
   }
@@ -1032,48 +1016,93 @@ function getCurrentPage() {
   
   let detectedPage = 'other';
   
-  // ⭐ NEW: Check /feed/ pages FIRST (before browse params)
-  if (cleanHash.includes('/feed/history') || combined.includes('/feed/history')) {
+  // ⭐ PRIORITY 1: Check browse parameters (Tizen TV uses these!)
+  
+  // Subscriptions
+  if (browseParam.includes('fesubscription')) {
+    detectedPage = 'subscriptions';
+  }
+  
+  // Library and its sub-pages
+  else if (browseParam === 'felibrary') {
+    detectedPage = 'library';
+  }
+  else if (browseParam === 'fehistory') {
     detectedPage = 'history';
-  } else if (cleanHash.includes('/feed/trending') || combined.includes('/feed/trending')) {
-    detectedPage = 'trending';
-  } else if (cleanHash.includes('/feed/playlists') || combined.includes('/feed/playlists')) {
+  }
+  else if (browseParam === 'femy_youtube') {
+    detectedPage = 'playlist'; // Watch Later via library tab
+  }
+  else if (browseParam === 'feplaylist_aggregation') {
     detectedPage = 'playlists';
-  } else if (cleanHash.includes('/feed/library') || cleanHash.includes('/library')) {
-    detectedPage = 'library';
   }
   
-  // Check browse parameters
-  else if (browseParam.includes('fesubscription') || browseParam.includes('subscriptions')) {
-    detectedPage = 'subscriptions';
-  } else if (browseParam.includes('felibrary')) {
-    detectedPage = 'library';
-  } else if (browseParam.includes('fetrending')) {
+  // Individual playlists (VL prefix = Video List)
+  else if (browseParam.startsWith('vlpl')) {
+    detectedPage = 'playlist'; // User playlist
+  }
+  else if (browseParam === 'vlwl') {
+    detectedPage = 'playlist'; // Watch Later
+  }
+  else if (browseParam === 'vlll') {
+    detectedPage = 'playlist'; // Liked Videos
+  }
+  
+  // Trending
+  else if (browseParam.includes('fetrending')) {
     detectedPage = 'trending';
-  } else if (browseParam.includes('fetopics_music') || browseParam.includes('music')) {
+  }
+  
+  // Topics (home variations)
+  else if (browseParam.includes('fetopics_music') || browseParam.includes('music')) {
     detectedPage = 'music';
-  } else if (browseParam.includes('fetopics_gaming') || browseParam.includes('gaming')) {
+  }
+  else if (browseParam.includes('fetopics_gaming') || browseParam.includes('gaming')) {
     detectedPage = 'gaming';
-  } else if (browseParam.includes('fetopics')) {
+  }
+  else if (browseParam.includes('fetopics')) {
     detectedPage = 'home';
-  } else if (browseParam.startsWith('uc') && browseParam.length > 10) {
+  }
+  
+  // Channel pages
+  else if (browseParam.startsWith('uc') && browseParam.length > 10) {
     detectedPage = 'channel';
   }
   
-  // Check traditional patterns
-  else if (cleanHash.includes('/feed/subscriptions') || cleanHash.includes('/subscriptions')) {
+  // ⭐ PRIORITY 2: Check /feed/ paths (desktop/mobile browsers)
+  else if (cleanHash.includes('/feed/subscriptions') || combined.includes('/feed/subscriptions')) {
     detectedPage = 'subscriptions';
-  } else if (cleanHash.includes('/playlist') || combined.includes('list=')) {
+  }
+  else if (cleanHash.includes('/feed/history') || combined.includes('/feed/history')) {
+    detectedPage = 'history';
+  }
+  else if (cleanHash.includes('/feed/trending') || combined.includes('/feed/trending')) {
+    detectedPage = 'trending';
+  }
+  else if (cleanHash.includes('/feed/playlists') || combined.includes('/feed/playlists')) {
+    detectedPage = 'playlists';
+  }
+  else if (cleanHash.includes('/feed/library') || cleanHash.includes('/library')) {
+    detectedPage = 'library';
+  }
+  
+  // ⭐ PRIORITY 3: Check traditional patterns
+  else if (cleanHash.includes('/playlist') || combined.includes('list=')) {
     detectedPage = 'playlist';
-  } else if (cleanHash.includes('/results') || cleanHash.includes('/search')) {
+  }
+  else if (cleanHash.includes('/results') || cleanHash.includes('/search')) {
     detectedPage = 'search';
-  } else if (cleanHash.includes('/watch')) {
+  }
+  else if (cleanHash.includes('/watch')) {
     detectedPage = 'watch';
-  } else if (cleanHash.includes('/@') || cleanHash.includes('/channel/')) {
+  }
+  else if (cleanHash.includes('/@') || cleanHash.includes('/channel/')) {
     detectedPage = 'channel';
-  } else if (cleanHash.includes('/browse') && !browseParam) {
+  }
+  else if (cleanHash.includes('/browse') && !browseParam) {
     detectedPage = 'home';
-  } else if (cleanHash === '' || cleanHash === '/') {
+  }
+  else if (cleanHash === '' || cleanHash === '/') {
     detectedPage = 'home';
   }
   
