@@ -410,10 +410,15 @@ jobs:
           URLS+="${NPM_BASE}@latest/package.json,"
           URLS+="${NPM_BASE}@latest/dist/userScript.js,"
           URLS+="${NPM_BASE}@latest/dist/service.js,"
+
           URLS+="${NPM_BASE}@*/package.json,"
           URLS+="${NPM_BASE}@*/dist/userScript.js,"
           URLS+="${NPM_BASE}@*/dist/service.js,"
+
           URLS+="${NPM_BASE}/package.json,"
+          URLS+="${NPM_BASE}/dist/userScript.js,"
+          URLS+="${NPM_BASE}/dist/service.js,"
+          
           URLS+="${NPM_BASE}@*,"
           
           # GitHub repo URLs - main branch
