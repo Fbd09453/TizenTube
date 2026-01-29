@@ -170,7 +170,7 @@ function customAction(action, parameters) {
         case 'FORCE_SHOW_CONSOLE':
             console.log('========================================');
             console.log('FORCE SHOW CONSOLE TEST');
-            console.log('[Console] Visual Console v270');
+            console.log('[Console] Visual Console v280');
             console.log('========================================');
             console.log('If you see this, the console is working!');
             console.log('Time:', new Date().toISOString());
@@ -187,20 +187,6 @@ function customAction(action, parameters) {
             } else {
                 console.error('✗ Console DIV not found!');
                 showToast('Console', 'ERROR: Console DIV not found');
-            }
-            break;
-        case 'CHECK_USB':
-            console.log('[USB] Manual check triggered from settings');
-            if (typeof window.checkUSB === 'function') {
-                try {
-                    window.checkUSB();
-                    showToast('USB Check', 'Checking for USB drives...');
-                } catch (e) {
-                    console.error('[USB] Check failed:', e);
-                    showToast('USB Check', 'Error: ' + e.message);
-                }
-            } else {
-                showToast('USB Check', 'USB check not available');
             }
             break;
     }

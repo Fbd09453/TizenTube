@@ -392,11 +392,6 @@ export default function modernUI(update, parameters) {
                             value: 'enableHideWatchedVideos'
                         },
                         {
-                            name: 'Hide Watched Videos in Playlists',
-                            icon: 'PLAYLIST_PLAY',
-                            value: 'enableHideWatchedInPlaylists'
-                        }, 
-                        {
                             name: 'Watched Videos Threshold',
                             value: null,
                             menuId: 'tt-hide-watched-videos-threshold',
@@ -443,28 +438,23 @@ export default function modernUI(update, parameters) {
                                     value: 'channel'
                                 },
                                 {
-                                    name: 'Library',
+                                    name: 'Library → Videos I Like',
                                     value: 'library'
                                 },
                                 {
-                                    name: 'Playlists Page',
+                                    name: 'Library → Playlists Overview',
                                     icon: 'PLAYLIST_PLAY',
                                     value: 'playlists'
                                 },
                                 {
-                                    name: 'Individual Playlists (WL, LL, etc)',
+                                    name: 'Library → Individual Playlists (WL, LL, etc)',
                                     icon: 'PLAYLIST_PLAY',
                                     value: 'playlist'
                                 },
                                 {
-                                    name: 'History',
+                                    name: 'Library → History',
                                     icon: 'HISTORY',
                                     value: 'history'
-                                },
-                                {
-                                    name: 'Trending',
-                                    icon: 'TRENDING',
-                                    value: 'trending'
                                 },
                                 {
                                     name: 'More',
@@ -473,11 +463,6 @@ export default function modernUI(update, parameters) {
                                 {
                                     name: 'Watch',
                                     value: 'watch'
-                                },
-                                {
-                                    name: 'Other/Unknown Pages',
-                                    icon: 'HELP',
-                                    value: 'other'
                                 }
                             ]
                         }
@@ -790,48 +775,11 @@ export default function modernUI(update, parameters) {
                                 value: '800'
                             },
                             {
-                                name: 'Double (1054px)',
+                                name: 'Full Screen (1054px)',
                                 key: 'debugConsoleHeight',
                                 value: '1054'
-                            },
-                            {
-                                name: 'Full Screen (1055px)',
-                                key: 'debugConsoleHeight',
-                                value: '1055'
                             }
                         ]
-                    },
-                    {
-                        name: 'USB Drive Monitoring',
-                        icon: 'SYSTEM_UPDATE',
-                        value: 'enableUSBMonitoring'
-                    },
-                    {
-                        name: '🔍 Manual USB Check',
-                        icon: 'SEARCH',
-                        value: null,
-                        options: {
-                            title: 'Manual USB Check',
-                            subtitle: 'Click the button below to scan for USB drives',
-                            content: overlayPanelItemListRenderer([
-                                buttonItem(
-                                    { title: 'Check USB Drives Now' },
-                                    { icon: 'SYSTEM_UPDATE' },
-                                    [
-                                        {
-                                            customAction: {
-                                                action: 'CHECK_USB'
-                                            }
-                                        },
-                                        {
-                                            signalAction: {
-                                                signal: 'POPUP_BACK'
-                                            }
-                                        }
-                                    ]
-                                )
-                            ])
-                        }
                     },
                     {
                         name: '🧪 Test Console',

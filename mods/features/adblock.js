@@ -212,25 +212,6 @@ JSON.parse = function () {
       console.log('[JSON.parse] tvBrowseRenderer already processed, SKIPPING');
     }
   }
-  
-  // ⭐ FORCE PROCESSING for problem pages
-  if (!r.__tizentubeForceProcessed) {
-    r.__tizentubeForceProcessed = true;
-    const page = getCurrentPage();
-    
-    // Pages that MUST be processed
-    const criticalPages = ['subscriptions', 'library', 'history', 'playlists', 'playlist', 'channel'];
-    
-    if (criticalPages.includes(page)) {
-      const debugEnabled = configRead('enableDebugConsole');
-      if (debugEnabled) {
-        console.log('[CRITICAL] ========================================');
-        console.log('[CRITICAL] Forcing processing for critical page:', page);
-        console.log('[CRITICAL] ========================================');
-      }
-      forceProcessPage(r, page);
-    }
-  }
 
   if (r.endscreen && configRead('enableHideEndScreenCards')) {
     console.log('UI_FILTER', 'Hiding end screen cards');
@@ -288,7 +269,7 @@ JSON.parse = function () {
     processShelves(r.continuationContents.sectionListContinuation.contents);
   }
   
-  // ⭐ PATCH 5: Handle onResponseReceivedActions (lazy-loaded channel tabs)
+  // Handle onResponseReceivedActions (lazy-loaded channel tabs)
   if (r?.onResponseReceivedActions) {
     const page = getCurrentPage();
     const debugEnabled = configRead('enableDebugConsole');
@@ -350,7 +331,7 @@ JSON.parse = function () {
     }
   }
 
-  // ⭐ NEW: Log library page structure
+  // Log library page structure
   if (r?.contents?.tvBrowseRenderer && getCurrentPage() === 'library') {
       console.log('[LIBRARY] ========================================');
       console.log('[LIBRARY] Structure detected');
@@ -368,7 +349,7 @@ JSON.parse = function () {
       console.log('[LIBRARY] ========================================');
   }
 
-  // ⭐ NEW: Special handling for playlists when entering them
+  // Special handling for playlists when entering them
   if (r?.contents?.singleColumnBrowseResultsRenderer && window.location.hash.includes('list=')) {
       console.log('[PLAYLIST] ========================================');
       console.log('[PLAYLIST] Entered playlist');
@@ -490,7 +471,7 @@ JSON.parse = function () {
     }
   }
   
-  // ⭐ UNIVERSAL FALLBACK - Filter EVERYTHING if we're on a critical page
+  // UNIVERSAL FALLBACK - Filter EVERYTHING if we're on a critical page
   const currentPage = getCurrentPage();
   const criticalPages = ['subscriptions', 'library', 'history', 'playlists', 'playlist', 'channel'];
   
@@ -575,11 +556,27 @@ function isShortItem(item) {
     }
   }
   
+  // Method 6: Check for shorts in tileRenderer metadata (Tizen 5.5 specific)
+  if (item.tileRenderer) {
+    // Check navigation endpoint
+    if (item.tileRenderer.onSelectCommand?.reelWatchEndpoint) {
+      return true;
+    }
+    
+    // Check thumbnail overlays on tileRenderer
+    if (item.tileRenderer.header?.tileHeaderRenderer?.thumbnailOverlays) {
+      const hasShortsBadge = item.tileRenderer.header.tileHeaderRenderer.thumbnailOverlays.some(overlay =>
+        overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS'
+      );
+      if (hasShortsBadge) return true;
+    }
+  }
+  
   return false;
 }
 
 function processShelves(shelves, shouldAddPreviews = true) {
-  const ENABLE_SHELF_DEBUG = configRead('enableDebugConsole'); // Changed to use config
+  const ENABLE_SHELF_DEBUG = configRead('enableDebugConsole');
   
   if (!Array.isArray(shelves)) {
     console.warn('[SHELF_PROCESS] processShelves called with non-array', { type: typeof shelves });
@@ -665,7 +662,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
           shelve.shelfRenderer.content.horizontalListRenderer.items = items;
           
           if (items.length === 0) {
-            console.log('[SHELF_PROCESS] Shelf now empty, removing');
+            console.log('[SHELF_PROCESS] Shelf now empty, removing shelf completely');
             shelves.splice(i, 1);
             shelvesRemoved++;
             continue;
@@ -708,7 +705,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
           shelve.shelfRenderer.content.gridRenderer.items = items;
           
           if (items.length === 0) {
-            console.log('[SHELF_PROCESS] Shelf now empty, removing');
+            console.log('[SHELF_PROCESS] Shelf now empty, removing shelf completely');
             shelves.splice(i, 1);
             shelvesRemoved++;
             continue;
@@ -751,7 +748,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
           shelve.shelfRenderer.content.verticalListRenderer.items = items;
           
           if (items.length === 0) {
-            console.log('[SHELF_PROCESS] Shelf now empty, removing');
+            console.log('[SHELF_PROCESS] Shelf now empty, removing shelf completely');
             shelves.splice(i, 1);
             shelvesRemoved++;
             continue;
@@ -795,6 +792,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
         shelve.richShelfRenderer.content.richGridRenderer.contents = contents;
         
         if (contents.length === 0) {
+          console.log('[SHELF_PROCESS] Shelf now empty, removing shelf completely');
           shelves.splice(i, 1);
           shelvesRemoved++;
           continue;
@@ -854,7 +852,7 @@ function processShelves(shelves, shouldAddPreviews = true) {
         shelve.gridRenderer.items = items;
         
         if (items.length === 0) {
-          console.log('[SHELF_PROCESS] Shelf now empty, removing');
+          console.log('[SHELF_PROCESS] Shelf now empty, removing shelf completely');
           shelves.splice(i, 1);
           shelvesRemoved++;
           continue;
@@ -866,6 +864,35 @@ function processShelves(shelves, shouldAddPreviews = true) {
       
     } catch (error) {
       console.log('[SHELF] ERROR shelf', (shelves.length - i), ':', error.message);
+    }
+  }
+  
+  // FINAL CLEANUP: Remove any remaining empty shelves
+  for (let i = shelves.length - 1; i >= 0; i--) {
+    const shelve = shelves[i];
+    if (!shelve) {
+      shelves.splice(i, 1);
+      continue;
+    }
+    
+    // Check all possible shelf types for empty content
+    let isEmpty = false;
+    
+    if (shelve.shelfRenderer?.content?.horizontalListRenderer?.items) {
+      isEmpty = shelve.shelfRenderer.content.horizontalListRenderer.items.length === 0;
+    } else if (shelve.shelfRenderer?.content?.gridRenderer?.items) {
+      isEmpty = shelve.shelfRenderer.content.gridRenderer.items.length === 0;
+    } else if (shelve.shelfRenderer?.content?.verticalListRenderer?.items) {
+      isEmpty = shelve.shelfRenderer.content.verticalListRenderer.items.length === 0;
+    } else if (shelve.richShelfRenderer?.content?.richGridRenderer?.contents) {
+      isEmpty = shelve.richShelfRenderer.content.richGridRenderer.contents.length === 0;
+    } else if (shelve.gridRenderer?.items) {
+      isEmpty = shelve.gridRenderer.items.length === 0;
+    }
+    
+    if (isEmpty) {
+      console.log('[SHELF_CLEANUP] Removing empty shelf at final cleanup');
+      shelves.splice(i, 1);
     }
   }
   
@@ -931,7 +958,6 @@ function deArrowify(items) {
 function hqify(items) {
   for (const item of items) {
     if (!item.tileRenderer) continue;
-    //if (item.tileRenderer.style !== 'TILE_STYLE_YTLR_DEFAULT') continue;
     if (configRead('enableHqThumbnails')) {
       if (!item.tileRenderer.onSelectCommand?.watchEndpoint?.videoId) continue;
       const videoID = item.tileRenderer.onSelectCommand.watchEndpoint.videoId;
@@ -950,7 +976,6 @@ function hqify(items) {
 function addLongPress(items) {
   for (const item of items) {
     if (!item.tileRenderer) continue;
-    //if (item.tileRenderer.style !== 'TILE_STYLE_YTLR_DEFAULT') continue;
     // Skip non-video tiles (channels, playlists, etc)
     if (item.tileRenderer.contentType && 
         item.tileRenderer.contentType !== 'TILE_CONTENT_TYPE_VIDEO') {
@@ -985,7 +1010,6 @@ function addLongPress(items) {
 function hideVideo(items) {
   const debugEnabled = configRead('enableDebugConsole');
   
-  // ⭐ DIAGNOSTIC: Log entry
   if (debugEnabled) {
     console.log('[HIDE] ========================================');
     console.log('[HIDE] hideVideo() called with', items ? items.length : 0, 'items');
@@ -1003,7 +1027,6 @@ function hideVideo(items) {
   const configPages = configRead('hideWatchedVideosPages') || [];
   const threshold = Number(configRead('hideWatchedVideosThreshold') || 0);
 
-  // ⭐ DIAGNOSTIC: Log configuration
   if (debugEnabled) {
     console.log('[HIDE] Current page:', page);
     console.log('[HIDE] Configured pages:', configPages);
@@ -1139,7 +1162,7 @@ function findProgressBar(item) {
   return null;
 }
 
-// Track last page to detect changes - MOVED OUTSIDE FUNCTION
+// Track last page to detect changes
 let lastDetectedPage = null;
 let lastFullUrl = null;
 
@@ -1168,7 +1191,7 @@ function getCurrentPage() {
   
   let detectedPage = 'other';
   
-  // ⭐ PRIORITY 1: Check browse parameters (Tizen TV uses these!)
+  // PRIORITY 1: Check browse parameters (Tizen TV uses these!)
   
   // Subscriptions
   if (browseParam.includes('fesubscription')) {
@@ -1200,11 +1223,6 @@ function getCurrentPage() {
     detectedPage = 'playlist'; // Liked Videos
   }
   
-  // Trending
-  else if (browseParam.includes('fetrending')) {
-    detectedPage = 'trending';
-  }
-  
   // Topics (home variations)
   else if (browseParam.includes('fetopics_music') || browseParam.includes('music')) {
     detectedPage = 'music';
@@ -1221,24 +1239,7 @@ function getCurrentPage() {
     detectedPage = 'channel';
   }
   
-  // ⭐ PRIORITY 2: Check /feed/ paths (desktop/mobile browsers)
-  else if (cleanHash.includes('/feed/subscriptions') || combined.includes('/feed/subscriptions')) {
-    detectedPage = 'subscriptions';
-  }
-  else if (cleanHash.includes('/feed/history') || combined.includes('/feed/history')) {
-    detectedPage = 'history';
-  }
-  else if (cleanHash.includes('/feed/trending') || combined.includes('/feed/trending')) {
-    detectedPage = 'trending';
-  }
-  else if (cleanHash.includes('/feed/playlists') || combined.includes('/feed/playlists')) {
-    detectedPage = 'playlists';
-  }
-  else if (cleanHash.includes('/feed/library') || cleanHash.includes('/library')) {
-    detectedPage = 'library';
-  }
-  
-  // ⭐ PRIORITY 3: Check traditional patterns
+  // PRIORITY 2: Check traditional patterns
   else if (cleanHash.includes('/playlist') || combined.includes('list=')) {
     detectedPage = 'playlist';
   }
@@ -1276,73 +1277,4 @@ function getCurrentPage() {
   }
   
   return detectedPage;
-}
-
-function forceProcessPage(r, pageType) {
-  // This function FORCES processing regardless of flags
-  const debugEnabled = configRead('enableDebugConsole');
-  
-  if (debugEnabled) {
-    console.log('[FORCE] ========================================');
-    console.log('[FORCE] Forcing processing for page:', pageType);
-    console.log('[FORCE] ========================================');
-  }
-  
-  // Try to find ANY shelves in the response
-  let shelves = null;
-  
-  // Method 1: tvBrowseRenderer (most pages)
-  if (r?.contents?.tvBrowseRenderer?.content?.tvSurfaceContentRenderer?.content?.sectionListRenderer?.contents) {
-    shelves = r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents;
-    if (debugEnabled) console.log('[FORCE] Found shelves via tvBrowseRenderer:', shelves.length);
-  }
-  
-  // Method 2: sectionListRenderer (some pages)
-  else if (r?.contents?.sectionListRenderer?.contents) {
-    shelves = r.contents.sectionListRenderer.contents;
-    if (debugEnabled) console.log('[FORCE] Found shelves via sectionListRenderer:', shelves.length);
-  }
-  
-  // Method 3: twoColumnBrowseResultsRenderer (playlists)
-  else if (r?.contents?.twoColumnBrowseResultsRenderer?.tabs) {
-    const tabs = r.contents.twoColumnBrowseResultsRenderer.tabs;
-    tabs.forEach((tab, idx) => {
-      if (tab.tabRenderer?.content?.sectionListRenderer?.contents) {
-        shelves = tab.tabRenderer.content.sectionListRenderer.contents;
-        if (debugEnabled) console.log('[FORCE] Found shelves in tab', idx, ':', shelves.length);
-      }
-    });
-  }
-  
-  // Method 4: tvSecondaryNavRenderer (subscriptions with tabs)
-  else if (r?.contents?.tvBrowseRenderer?.content?.tvSecondaryNavRenderer?.sections) {
-    const sections = r.contents.tvBrowseRenderer.content.tvSecondaryNavRenderer.sections;
-    if (debugEnabled) console.log('[FORCE] Found secondary nav with', sections.length, 'sections');
-    
-    sections.forEach((section, sIdx) => {
-      if (section.tvSecondaryNavSectionRenderer?.tabs) {
-        section.tvSecondaryNavSectionRenderer.tabs.forEach((tab, tIdx) => {
-          const tabShelves = tab.tabRenderer?.content?.tvSurfaceContentRenderer?.content?.sectionListRenderer?.contents;
-          if (tabShelves && tabShelves.length > 0) {
-            if (debugEnabled) console.log('[FORCE] Processing tab', tIdx, 'with', tabShelves.length, 'shelves');
-            processShelves(tabShelves);
-          }
-        });
-      }
-    });
-  }
-  
-  // If we found shelves, process them
-  if (shelves && Array.isArray(shelves) && shelves.length > 0) {
-    if (debugEnabled) console.log('[FORCE] Calling processShelves with', shelves.length, 'items');
-    try {
-      processShelves(shelves);
-      if (debugEnabled) console.log('[FORCE] processShelves completed successfully');
-    } catch (error) {
-      console.error('[FORCE] ERROR in processShelves:', error.message);
-      console.error('[FORCE] Stack:', error.stack);
-    }
-  } else {
-    if (debugEnabled) console.log('[FORCE] ⚠️  NO SHELVES FOUND in response');
-  }
 }

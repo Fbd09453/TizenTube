@@ -40,13 +40,13 @@ const defaultConfig = {
       'music', 
       'gaming', 
       'subscriptions', 
-      'more', 
       'channel',
       'library',
       'playlists',
+      'playlist',
       'history',
-      'trending',
-      'playlist'
+      'more',
+      'watch'
   ],
   enableHideWatchedInPlaylists: true,
   enablePlaylistContinueButton: true,
@@ -64,8 +64,7 @@ const defaultConfig = {
   enableUpdater: true,
   enableDebugConsole: false,
   debugConsolePosition: 'bottom-right', // top-left, top-right, bottom-left, bottom-right, center
-  debugConsoleHeight: '500',
-  enableUSBMonitoring: false
+  debugConsoleHeight: '500'
 };
 
 let localConfig;
