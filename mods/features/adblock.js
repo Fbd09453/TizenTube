@@ -1221,7 +1221,7 @@ function hideVideo(items) {
                        'unknown';
         console.log('[HIDE_DEBUG] No progress bar found for:', videoId, '- KEEPING video');
       }
-      return true; // Keep videos without progress bar
+      // return true; // Keep videos without progress bar
     }
     
     const percentWatched = Number(progressBar.percentDurationWatched || 0);
