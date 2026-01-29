@@ -138,13 +138,13 @@
         }
     }
 
-    console.log = function(...args) {
-        originalLog.apply(console, args);
-        // Only add to logs if console is enabled
-        if (enabled) {
-            addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'log');
-        }
-    };
+        console.log = function(...args) {
+                originalLog.apply(console, args);
+                        // Only add to logs if console is enabled
+                                if (enabled) {
+                                            addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'log');
+                                                    }
+                                                        };
 
     console.error = function(...args) {
         originalError.apply(console, args);
@@ -273,7 +273,7 @@
     }
     
     console.log('[Console] ========================================');
-    console.log('[Console] Visual Console v280 - NEWEST FIRST');
+    console.log('[Console] Visual Console v290 - NEWEST FIRST');
     console.log('[Console] ========================================');
     console.log('[Console] ⚡ NEWEST LOGS AT TOP (scroll down for older)');
     console.log('[Console] Remote Controls:');

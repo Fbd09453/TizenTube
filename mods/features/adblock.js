@@ -109,6 +109,57 @@ function scanAndFilterAllArrays(obj, page, path = 'root') {
       }
       return directFilterArray(obj, page, path);
     }
+    
+    // Check if this is a shelves array - remove empty shelves after filtering
+    const hasShelves = obj.some(item =>
+      item?.shelfRenderer ||
+      item?.richShelfRenderer ||
+      item?.gridRenderer
+    );
+    
+    if (hasShelves) {
+      // Filter shelves recursively first
+      for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          const value = obj[key];
+          if (value && typeof value === 'object') {
+            scanAndFilterAllArrays(value, page, path + '[' + key + ']');
+          }
+        }
+      }
+      
+      // Then remove empty shelves
+      for (let i = obj.length - 1; i >= 0; i--) {
+        const shelf = obj[i];
+        if (!shelf) {
+          obj.splice(i, 1);
+          continue;
+        }
+        
+        let isEmpty = false;
+        
+        if (shelf.shelfRenderer?.content?.horizontalListRenderer?.items) {
+          isEmpty = shelf.shelfRenderer.content.horizontalListRenderer.items.length === 0;
+        } else if (shelf.shelfRenderer?.content?.gridRenderer?.items) {
+          isEmpty = shelf.shelfRenderer.content.gridRenderer.items.length === 0;
+        } else if (shelf.shelfRenderer?.content?.verticalListRenderer?.items) {
+          isEmpty = shelf.shelfRenderer.content.verticalListRenderer.items.length === 0;
+        } else if (shelf.richShelfRenderer?.content?.richGridRenderer?.contents) {
+          isEmpty = shelf.richShelfRenderer.content.richGridRenderer.contents.length === 0;
+        } else if (shelf.gridRenderer?.items) {
+          isEmpty = shelf.gridRenderer.items.length === 0;
+        }
+        
+        if (isEmpty) {
+          if (debugEnabled) {
+            console.log('[SCAN_CLEANUP] Removing empty shelf at:', path + '[' + i + ']');
+          }
+          obj.splice(i, 1);
+        }
+      }
+      
+      return; // Don't return the array, we modified it in place
+    }
   }
   
   // Recursively scan object properties
@@ -507,8 +558,11 @@ for (const key in window._yttv) {
 function isShortItem(item) {
   if (!item) return false;
   
+  const debugEnabled = configRead('enableDebugConsole');
+  
   // Method 1: Check tileRenderer contentType
   if (item.tileRenderer?.contentType === 'TILE_CONTENT_TYPE_SHORT') {
+    if (debugEnabled) console.log('[SHORTS_DETECT] Method 1 (contentType):', item.tileRenderer.contentId || 'unknown');
     return true;
   }
   
@@ -520,19 +574,24 @@ function isShortItem(item) {
         overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS' ||
         overlay.thumbnailOverlayTimeStatusRenderer?.text?.simpleText === 'SHORTS'
       );
-      if (hasShortsBadge) return true;
+      if (hasShortsBadge) {
+        if (debugEnabled) console.log('[SHORTS_DETECT] Method 2 (videoRenderer overlay):', item.videoRenderer.videoId || 'unknown');
+        return true;
+      }
     }
     
     // Check navigation endpoint for shorts
     const navEndpoint = item.videoRenderer.navigationEndpoint;
     if (navEndpoint?.reelWatchEndpoint || 
         navEndpoint?.commandMetadata?.webCommandMetadata?.url?.includes('/shorts/')) {
+      if (debugEnabled) console.log('[SHORTS_DETECT] Method 2 (videoRenderer endpoint):', item.videoRenderer.videoId || 'unknown');
       return true;
     }
   }
   
   // Method 3: Check richItemRenderer for shorts (newer format)
   if (item.richItemRenderer?.content?.reelItemRenderer) {
+    if (debugEnabled) console.log('[SHORTS_DETECT] Method 3 (richItemRenderer)');
     return true;
   }
   
@@ -542,7 +601,10 @@ function isShortItem(item) {
       const hasShortsBadge = item.gridVideoRenderer.thumbnailOverlays.some(overlay =>
         overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS'
       );
-      if (hasShortsBadge) return true;
+      if (hasShortsBadge) {
+        if (debugEnabled) console.log('[SHORTS_DETECT] Method 4 (gridVideoRenderer):', item.gridVideoRenderer.videoId || 'unknown');
+        return true;
+      }
     }
   }
   
@@ -552,7 +614,10 @@ function isShortItem(item) {
       const hasShortsBadge = item.compactVideoRenderer.thumbnailOverlays.some(overlay =>
         overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS'
       );
-      if (hasShortsBadge) return true;
+      if (hasShortsBadge) {
+        if (debugEnabled) console.log('[SHORTS_DETECT] Method 5 (compactVideoRenderer):', item.compactVideoRenderer.videoId || 'unknown');
+        return true;
+      }
     }
   }
   
@@ -560,6 +625,7 @@ function isShortItem(item) {
   if (item.tileRenderer) {
     // Check navigation endpoint
     if (item.tileRenderer.onSelectCommand?.reelWatchEndpoint) {
+      if (debugEnabled) console.log('[SHORTS_DETECT] Method 6 (tileRenderer reelWatchEndpoint):', item.tileRenderer.contentId || 'unknown');
       return true;
     }
     
@@ -568,7 +634,15 @@ function isShortItem(item) {
       const hasShortsBadge = item.tileRenderer.header.tileHeaderRenderer.thumbnailOverlays.some(overlay =>
         overlay.thumbnailOverlayTimeStatusRenderer?.style === 'SHORTS'
       );
-      if (hasShortsBadge) return true;
+      if (hasShortsBadge) {
+        if (debugEnabled) console.log('[SHORTS_DETECT] Method 6 (tileRenderer overlay):', item.tileRenderer.contentId || 'unknown');
+        return true;
+      }
+    }
+    
+    // Log if we checked a tileRenderer but didn't find it was a short
+    if (debugEnabled && item.tileRenderer.contentId) {
+      console.log('[SHORTS_DETECT] Checked tileRenderer but NOT a short:', item.tileRenderer.contentId);
     }
   }
   
@@ -1042,7 +1116,7 @@ function hideVideo(items) {
     window._lastLoggedPage = page;
   }
   
-  // Special handling for playlists
+  // Special handling for playlists (legacy config support)
   if (page === 'playlist' || page === 'playlists') {
     if (!configRead('enableHideWatchedInPlaylists')) {
       if (debugEnabled) console.log('[HIDE] Playlist filtering disabled by config');
@@ -1051,13 +1125,13 @@ function hideVideo(items) {
     if (debugEnabled) console.log('[HIDE] Filtering playlist page (config enabled)');
   }
   
-  // Check if this page should be filtered
-  const shouldHideOnThisPage = configPages.length === 0 || 
-                                configPages.includes(page) ||
+  // ⭐ EXACT PAGE MATCHING - Only filter if THIS EXACT page is in the list
+  // This prevents "library" from filtering "history", "playlists", "playlist"
+  const shouldHideOnThisPage = configPages.includes(page) ||
                                 (page === 'playlist' && configRead('enableHideWatchedInPlaylists'));
   
   if (!shouldHideOnThisPage) {
-    if (debugEnabled) console.log('[HIDE] Page', page, 'not in filter list');
+    if (debugEnabled) console.log('[HIDE] Page', page, 'not in filter list (exact match required)');
     return items;
   }
   

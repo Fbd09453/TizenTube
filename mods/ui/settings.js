@@ -438,7 +438,7 @@ export default function modernUI(update, parameters) {
                                     value: 'channel'
                                 },
                                 {
-                                    name: 'Library → Videos I Like',
+                                    name: 'Library',
                                     value: 'library'
                                 },
                                 {
