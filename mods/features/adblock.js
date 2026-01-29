@@ -1139,6 +1139,7 @@ function hideVideo(items) {
   const page = getCurrentPage();
   const configPages = configRead('hideWatchedVideosPages') || [];
   const threshold = Number(configRead('hideWatchedVideosThreshold') || 0);
+  const shortsEnabled = configRead('enableShorts');
   
   // Special handling for playlists
   if (page === 'playlist' || page === 'playlists') {
@@ -1156,6 +1157,7 @@ function hideVideo(items) {
   }
   
   let hiddenCount = 0;
+  let shortsCount = 0;
   
   const filtered = items.filter(item => {
     if (!item) return false;
@@ -1164,6 +1166,12 @@ function hideVideo(items) {
     if (item.tileRenderer?.contentType && 
         item.tileRenderer.contentType !== 'TILE_CONTENT_TYPE_VIDEO') {
       return true;
+    }
+    
+    // ⭐ CRITICAL: Filter shorts FIRST (before checking progress bar)
+    if (!shortsEnabled && isShortItem(item)) {
+      shortsCount++;
+      return false;
     }
     
     const progressBar = findProgressBar(item);
@@ -1184,8 +1192,8 @@ function hideVideo(items) {
     return true;
   });
   
-  if (debugEnabled && hiddenCount > 0) {
-    console.log('[HIDE] Page:', page, '| Hidden:', hiddenCount, '| ' + items.length + '→' + filtered.length);
+  if (debugEnabled && (hiddenCount > 0 || shortsCount > 0)) {
+    console.log('[HIDE] Page:', page, '| Hidden:', hiddenCount, '| Shorts:', shortsCount, '| ' + items.length + '→' + filtered.length);
   }
   
   return filtered;
