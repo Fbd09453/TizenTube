@@ -86,6 +86,25 @@ JSON.parse = function () {
       console.log('[JSON.parse] tvBrowseRenderer already processed, SKIPPING');
     }
   }
+  
+  // ⭐ FORCE PROCESSING for problem pages
+  if (!r.__tizentubeForceProcessed) {
+    r.__tizentubeForceProcessed = true;
+    const page = getCurrentPage();
+    
+    // Pages that MUST be processed
+    const criticalPages = ['subscriptions', 'library', 'history', 'playlists', 'playlist', 'channel'];
+    
+    if (criticalPages.includes(page)) {
+      const debugEnabled = configRead('enableDebugConsole');
+      if (debugEnabled) {
+        console.log('[CRITICAL] ========================================');
+        console.log('[CRITICAL] Forcing processing for critical page:', page);
+        console.log('[CRITICAL] ========================================');
+      }
+      forceProcessPage(r, page);
+    }
+  }
 
   if (r.endscreen && configRead('enableHideEndScreenCards')) {
     console.log('UI_FILTER', 'Hiding end screen cards');
@@ -148,17 +167,22 @@ JSON.parse = function () {
     const debugEnabled = configRead('enableDebugConsole');
     const page = getCurrentPage();
     
+    console.log('[CONTINUATION] ========================================');
+    console.log('[CONTINUATION] onResponseReceivedActions detected');
+    console.log('[CONTINUATION] Page:', page);
+    console.log('[CONTINUATION] Actions:', r.onResponseReceivedActions.length);
+    console.log('[CONTINUATION] ========================================');
+    
     r.onResponseReceivedActions.forEach((action, actionIndex) => {
       if (action.appendContinuationItemsAction?.continuationItems) {
-        if (debugEnabled) {
-          console.log('[CONTINUATION] ========================================');
-          console.log('[CONTINUATION] Page:', page);
-          console.log('[CONTINUATION] Action', actionIndex, '- Processing items');
-          console.log('[CONTINUATION] ========================================');
-        }
-        
         const items = action.appendContinuationItemsAction.continuationItems;
-        processShelves(items);
+        console.log('[CONTINUATION] Action', actionIndex, '- Processing', items.length, 'items');
+        
+        try {
+          processShelves(items);
+        } catch (error) {
+          console.error('[CONTINUATION] ERROR processing action', actionIndex, ':', error.message);
+        }
       }
     });
   }
@@ -455,9 +479,10 @@ function isShortItem(item) {
 }
 
 function processShelves(shelves, shouldAddPreviews = true) {
-  const ENABLE_SHELF_DEBUG = false; // Set to true when debugging specific shelf issues
+  const ENABLE_SHELF_DEBUG = configRead('enableDebugConsole'); // Changed to use config
+  
   if (!Array.isArray(shelves)) {
-    logger.warn('SHELF_PROCESS', 'processShelves called with non-array', { type: typeof shelves });
+    console.warn('[SHELF_PROCESS] processShelves called with non-array', { type: typeof shelves });
     return;
   }
   
@@ -858,11 +883,32 @@ function addLongPress(items) {
 }
 
 function hideVideo(items) {
-  if (!configRead('enableHideWatchedVideos') || !Array.isArray(items)) return items;
+  const debugEnabled = configRead('enableDebugConsole');
+  
+  // ⭐ DIAGNOSTIC: Log entry
+  if (debugEnabled) {
+    console.log('[HIDE] ========================================');
+    console.log('[HIDE] hideVideo() called with', items ? items.length : 0, 'items');
+  }
+  
+  if (!configRead('enableHideWatchedVideos') || !Array.isArray(items)) {
+    if (debugEnabled) {
+      console.log('[HIDE] SKIPPED - enableHideWatchedVideos:', configRead('enableHideWatchedVideos'));
+      console.log('[HIDE] SKIPPED - items is array:', Array.isArray(items));
+    }
+    return items;
+  }
   
   const page = getCurrentPage();
   const configPages = configRead('hideWatchedVideosPages') || [];
   const threshold = Number(configRead('hideWatchedVideosThreshold') || 0);
+
+  // ⭐ DIAGNOSTIC: Log configuration
+  if (debugEnabled) {
+    console.log('[HIDE] Current page:', page);
+    console.log('[HIDE] Configured pages:', configPages);
+    console.log('[HIDE] Threshold:', threshold + '%');
+  }
 
   if (window._lastLoggedPage !== page) {
     console.log('[PAGE_DEBUG] ========================================');
@@ -876,10 +922,10 @@ function hideVideo(items) {
   // Special handling for playlists
   if (page === 'playlist' || page === 'playlists') {
     if (!configRead('enableHideWatchedInPlaylists')) {
-      console.log('[HIDE] Playlist filtering disabled by config');
+      if (debugEnabled) console.log('[HIDE] Playlist filtering disabled by config');
       return items;
     }
-    console.log('[HIDE] Filtering playlist page (config enabled)');
+    if (debugEnabled) console.log('[HIDE] Filtering playlist page (config enabled)');
   }
   
   // Check if this page should be filtered
@@ -888,11 +934,14 @@ function hideVideo(items) {
                                 (page === 'playlist' && configRead('enableHideWatchedInPlaylists'));
   
   if (!shouldHideOnThisPage) {
-    console.log('[HIDE] Page', page, 'not in filter list');
+    if (debugEnabled) console.log('[HIDE] Page', page, 'not in filter list');
     return items;
   }
   
-  console.log('[HIDE] Filtering page:', page, 'threshold:', threshold + '%');
+  if (debugEnabled) {
+    console.log('[HIDE] ✓ Filtering enabled for page:', page);
+    console.log('[HIDE] Threshold:', threshold + '%');
+  }
   
   let hiddenCount = 0;
   
@@ -915,15 +964,18 @@ function hideVideo(items) {
                      item.videoRenderer?.videoId || 
                      'unknown';
       
-      console.log('[HIDE] Hiding:', videoId, '(' + percentWatched + '%)');
+      if (debugEnabled) {
+        console.log('[HIDE] Hiding:', videoId, '(' + percentWatched + '%)');
+      }
       return false;
     }
     
     return true;
   });
   
-  if (hiddenCount > 0) {
+  if (debugEnabled || hiddenCount > 0) {
     console.log('[HIDE] Total hidden:', hiddenCount, 'videos on page:', page);
+    console.log('[HIDE] Before:', items.length, '→ After:', filtered.length);
   }
   
   return filtered;
@@ -1124,4 +1176,73 @@ function getCurrentPage() {
   }
   
   return detectedPage;
+}
+
+function forceProcessPage(r, pageType) {
+  // This function FORCES processing regardless of flags
+  const debugEnabled = configRead('enableDebugConsole');
+  
+  if (debugEnabled) {
+    console.log('[FORCE] ========================================');
+    console.log('[FORCE] Forcing processing for page:', pageType);
+    console.log('[FORCE] ========================================');
+  }
+  
+  // Try to find ANY shelves in the response
+  let shelves = null;
+  
+  // Method 1: tvBrowseRenderer (most pages)
+  if (r?.contents?.tvBrowseRenderer?.content?.tvSurfaceContentRenderer?.content?.sectionListRenderer?.contents) {
+    shelves = r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents;
+    if (debugEnabled) console.log('[FORCE] Found shelves via tvBrowseRenderer:', shelves.length);
+  }
+  
+  // Method 2: sectionListRenderer (some pages)
+  else if (r?.contents?.sectionListRenderer?.contents) {
+    shelves = r.contents.sectionListRenderer.contents;
+    if (debugEnabled) console.log('[FORCE] Found shelves via sectionListRenderer:', shelves.length);
+  }
+  
+  // Method 3: twoColumnBrowseResultsRenderer (playlists)
+  else if (r?.contents?.twoColumnBrowseResultsRenderer?.tabs) {
+    const tabs = r.contents.twoColumnBrowseResultsRenderer.tabs;
+    tabs.forEach((tab, idx) => {
+      if (tab.tabRenderer?.content?.sectionListRenderer?.contents) {
+        shelves = tab.tabRenderer.content.sectionListRenderer.contents;
+        if (debugEnabled) console.log('[FORCE] Found shelves in tab', idx, ':', shelves.length);
+      }
+    });
+  }
+  
+  // Method 4: tvSecondaryNavRenderer (subscriptions with tabs)
+  else if (r?.contents?.tvBrowseRenderer?.content?.tvSecondaryNavRenderer?.sections) {
+    const sections = r.contents.tvBrowseRenderer.content.tvSecondaryNavRenderer.sections;
+    if (debugEnabled) console.log('[FORCE] Found secondary nav with', sections.length, 'sections');
+    
+    sections.forEach((section, sIdx) => {
+      if (section.tvSecondaryNavSectionRenderer?.tabs) {
+        section.tvSecondaryNavSectionRenderer.tabs.forEach((tab, tIdx) => {
+          const tabShelves = tab.tabRenderer?.content?.tvSurfaceContentRenderer?.content?.sectionListRenderer?.contents;
+          if (tabShelves && tabShelves.length > 0) {
+            if (debugEnabled) console.log('[FORCE] Processing tab', tIdx, 'with', tabShelves.length, 'shelves');
+            processShelves(tabShelves);
+          }
+        });
+      }
+    });
+  }
+  
+  // If we found shelves, process them
+  if (shelves && Array.isArray(shelves) && shelves.length > 0) {
+    if (debugEnabled) console.log('[FORCE] Calling processShelves with', shelves.length, 'items');
+    try {
+      processShelves(shelves);
+      if (debugEnabled) console.log('[FORCE] processShelves completed successfully');
+    } catch (error) {
+      console.error('[FORCE] ERROR in processShelves:', error.message);
+      console.error('[FORCE] Stack:', error.stack);
+    }
+  } else {
+    if (debugEnabled) console.log('[FORCE] ⚠️  NO SHELVES FOUND in response');
+  }
 }
