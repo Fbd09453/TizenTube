@@ -7,6 +7,11 @@ import { PatchSettings } from '../ui/customYTSettings.js';
 function directFilterArray(arr, page, context = '') {
   if (!Array.isArray(arr) || arr.length === 0) return arr;
   
+  // ⭐ CRITICAL: Check if this array was already filtered
+  if (arr.__alreadyFiltered) {
+    return arr;
+  }
+  
   const debugEnabled = configRead('enableDebugConsole');
   const shortsEnabled = configRead('enableShorts');
   const hideWatchedEnabled = configRead('enableHideWatchedVideos');
@@ -22,6 +27,15 @@ function directFilterArray(arr, page, context = '') {
   // Skip if nothing to do
   if (!shouldFilterShorts && !shouldHideWatched) {
     return arr;
+  }
+  
+  // Generate unique call ID for debugging
+  const callId = Math.random().toString(36).substr(2, 6);
+  
+  // ⭐ DEBUG: Log configuration
+  if (debugEnabled && (shouldFilterShorts || shouldHideWatched)) {
+    console.log('[FILTER_START #' + callId + '] Context:', context, '| Page:', page, '| Items:', arr.length);
+    console.log('[FILTER_CONFIG #' + callId + '] Threshold:', threshold + '%', '| Hide watched:', shouldHideWatched, '| Filter shorts:', shouldFilterShorts);
   }
   
   let hiddenCount = 0;
@@ -41,21 +55,30 @@ function directFilterArray(arr, page, context = '') {
     
     if (!isVideoItem) return true;
     
+    const videoId = item.tileRenderer?.contentId || 
+                   item.videoRenderer?.videoId || 
+                   item.playlistVideoRenderer?.videoId ||
+                   'unknown';
+    
     // ⭐ STEP 1: Filter shorts FIRST (before checking progress bars)
     if (shouldFilterShorts && isShortItem(item)) {
       shortsCount++;
+      if (debugEnabled) {
+        console.log('[FILTER #' + callId + '] REMOVED SHORT:', videoId);
+      }
       return false;
     }
     
     // ⭐ STEP 2: Filter watched videos (only if enabled for this page)
     if (shouldHideWatched) {
       const progressBar = findProgressBar(item);
-      
-      // ⭐ CRITICAL FIX: Don't return true for no progress bar!
-      // Just skip to the threshold check - if no progress bar, percentWatched = 0
-      // which is below any reasonable threshold, so it will be kept anyway
-      
       const percentWatched = progressBar ? Number(progressBar.percentDurationWatched || 0) : 0;
+      
+      // ⭐ DEBUG: Log each decision
+      if (debugEnabled) {
+        const hasProgressBar = !!progressBar;
+        console.log('[FILTER #' + callId + '] Video:', videoId, '| Has progress:', hasProgressBar, '| Progress:', percentWatched + '%', '| Threshold:', threshold + '%', '| Will hide:', percentWatched >= threshold);
+      }
       
       // Hide if watched above threshold
       if (percentWatched >= threshold) {
@@ -67,9 +90,16 @@ function directFilterArray(arr, page, context = '') {
     return true;
   });
   
+  // ⭐ Mark this array as already filtered to prevent duplicate filtering
+  Object.defineProperty(filtered, '__alreadyFiltered', {
+    value: true,
+    enumerable: false,
+    writable: false
+  });
+  
   // Log summary
-  if (debugEnabled && (hiddenCount > 0 || shortsCount > 0)) {
-    console.log('[FILTER] ' + context + ' | Page:', page, '| ' + originalLength + '→' + filtered.length, '| Watched:', hiddenCount, '| Shorts:', shortsCount);
+  if (debugEnabled) {
+    console.log('[FILTER_END #' + callId + '] Result:', originalLength + '→' + filtered.length, '| Watched removed:', hiddenCount, '| Shorts removed:', shortsCount);
   }
   
   return filtered;
@@ -654,10 +684,24 @@ function isShortItem(item) {
     }
     
     // Method 8: Check video length - shorts are typically under 90 seconds (YouTube Shorts max is 60s but allow buffer)
-    // Look for lengthText in metadata
-    const lengthText = item.tileRenderer.metadata?.tileMetadataRenderer?.lines?.[0]?.lineRenderer?.items?.find(
-      i => i.lineItemRenderer?.badge || i.lineItemRenderer?.text?.simpleText
-    )?.lineItemRenderer?.text?.simpleText;
+    // Duration can be in multiple locations
+    let lengthText = null;
+    
+    // Location 1: thumbnailOverlays in header (Tizen 5.5 format)
+    const thumbnailOverlays = item.tileRenderer.header?.tileHeaderRenderer?.thumbnailOverlays;
+    if (thumbnailOverlays && Array.isArray(thumbnailOverlays)) {
+      const timeOverlay = thumbnailOverlays.find(o => o.thumbnailOverlayTimeStatusRenderer);
+      if (timeOverlay) {
+        lengthText = timeOverlay.thumbnailOverlayTimeStatusRenderer.text?.simpleText;
+      }
+    }
+    
+    // Location 2: metadata lines (fallback)
+    if (!lengthText) {
+      lengthText = item.tileRenderer.metadata?.tileMetadataRenderer?.lines?.[0]?.lineRenderer?.items?.find(
+        i => i.lineItemRenderer?.badge || i.lineItemRenderer?.text?.simpleText
+      )?.lineItemRenderer?.text?.simpleText;
+    }
     
     if (lengthText) {
       // Check if it's a short duration (under 90 seconds, format like "0:15", "0:45", "1:29")
@@ -672,8 +716,6 @@ function isShortItem(item) {
             console.log('[SHORTS_DETECT] Method 8 (duration ≤90s):', item.tileRenderer.contentId || 'unknown');
             console.log('[SHORTS_DETECT]   Duration:', lengthText, '(' + totalSeconds + 's)');
             console.log('[SHORTS_DETECT]   Title:', item.tileRenderer.metadata?.tileMetadataRenderer?.title?.simpleText || 'unknown');
-            console.log('[SHORTS_DETECT]   URL pattern:', item.tileRenderer.onSelectCommand?.watchEndpoint?.videoId ? 
-              '/watch?v=' + item.tileRenderer.onSelectCommand.watchEndpoint.videoId : 'unknown');
           }
           return true;
         }
