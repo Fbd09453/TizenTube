@@ -531,18 +531,18 @@ JSON.parse = function () {
     
     const debugEnabled = configRead('enableDebugConsole');
     
-    if (debugEnabled) {
-      console.log('[UNIVERSAL] ========================================');
-      console.log('[UNIVERSAL] Applying universal filtering to page:', currentPage);
-    }
+    //if (debugEnabled) {
+      //console.log('[UNIVERSAL] ========================================');
+      //console.log('[UNIVERSAL] Applying universal filtering to page:', currentPage);
+    //}
     
     // Scan the ENTIRE response object and filter ALL video arrays
     scanAndFilterAllArrays(r, currentPage);
     
-    if (debugEnabled) {
-      console.log('[UNIVERSAL] Universal filtering complete');
-      console.log('[UNIVERSAL] ========================================');
-    }
+    //if (debugEnabled) {
+      //console.log('[UNIVERSAL] Universal filtering complete');
+      //console.log('[UNIVERSAL] ========================================');
+    //}
   }
 
   return r;
